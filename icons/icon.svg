@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Background circle -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1c89f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d5aa7;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="tabGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.95" />
+      <stop offset="100%" style="stop-color:#e8e8e8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="tabGradient2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff9500;stop-opacity:0.95" />
+      <stop offset="100%" style="stop-color:#ff6f00;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Main background -->
+  <rect x="0" y="0" width="128" height="128" rx="24" fill="url(#bgGradient)"/>
+  
+  <!-- Back tab (darker - representing background tabs) -->
+  <g filter="url(#shadow)">
+    <path d="M 20 30 L 70 30 Q 80 30 80 40 L 80 85 Q 80 90 75 90 L 25 90 Q 20 90 20 85 L 20 30 Z" 
+          fill="#c8e1f7" opacity="0.7"/>
+  </g>
+  
+  <!-- Middle tab -->
+  <g filter="url(#shadow)">
+    <path d="M 30 40 L 80 40 Q 90 40 90 50 L 90 95 Q 90 100 85 100 L 35 100 Q 30 100 30 95 L 30 40 Z" 
+          fill="url(#tabGradient)"/>
+  </g>
+  
+  <!-- Front tab (main focus tab) -->
+  <g filter="url(#shadow)">
+    <path d="M 40 50 L 100 50 Q 110 50 110 60 L 110 105 Q 110 110 105 110 L 45 110 Q 40 110 40 105 L 40 50 Z" 
+          fill="url(#tabGradient)"/>
+    <!-- Tab highlight line -->
+    <rect x="45" y="58" width="60" height="3" rx="1.5" fill="#1c89f5" opacity="0.6"/>
+  </g>
+  
+  <!-- Magnifying glass (search symbol) -->
+  <g transform="translate(75, 85)">
+    <circle cx="15" cy="15" r="12" fill="none" stroke="#ff9500" stroke-width="4"/>
+    <line x1="24" y1="24" x2="34" y2="34" stroke="#ff9500" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  
+  <!-- Subtle inner glow -->
+  <rect x="4" y="4" width="120" height="120" rx="22" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="2"/>
+</svg>

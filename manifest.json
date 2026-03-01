@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "homepage_url": "https://github.com/AidSoul/YouTabs", 
+  "author": "AidSoul <work-aidsoul@outlook.com>",
+  "name": "YouTabs",
+  "version": "1.0.0",
+  "description": "A powerful tab management extension for Firefox that provides advanced grouping, organization, and intelligent page indexing with full-text search capabilities.",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "64": "icons/64.png",
+    "128": "icons/128.png",
+    "256": "icons/icon.png"
+  },
+  "sidebar_action": {
+    "default_panel": "sidebar.html",
+    "default_title": "YouTabs",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png"
+    }
+  },
+  "action": {
+    "default_title": "Show/Hide YouTabs",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png"
+    }
+  },
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "sidebar",
+    "storage",
+    "scripting",
+    "contextMenus",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "YouTabs@extension.firefox",
+      "strict_min_version": "120.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

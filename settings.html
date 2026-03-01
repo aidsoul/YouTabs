@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - YouTabs</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      padding: 0;
+      overflow: auto;
+    }
+    .settings-container {
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .settings-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 24px;
+      color: var(--text-primary);
+    }
+    .settings-section {
+      margin-bottom: 24px;
+    }
+    .settings-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .settings-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .settings-item:last-child {
+      border-bottom: none;
+    }
+    .settings-item.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .settings-item.disabled .settings-label,
+    .settings-item.disabled .settings-description {
+      opacity: 0.5;
+    }
+    .settings-label {
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+    .settings-description {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: var(--bg-inactive);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+    .toggle-switch.active {
+      background: var(--accent-color);
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 150ms ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .toggle-switch.active::after {
+      transform: translateX(20px);
+    }
+    .version-info {
+      text-align: center;
+      padding: 20px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .grouping-select {
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      font-size: 14px;
+      cursor: pointer;
+      min-width: 150px;
+    }
+    .grouping-select:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+    .max-results-input {
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      font-size: 14px;
+      width: 70px;
+      text-align: center;
+    }
+    .max-results-input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+    .index-setting-input {
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      font-size: 14px;
+      width: 80px;
+      text-align: center;
+    }
+    .index-setting-input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+    .index-expiration-inputs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .index-expiration-inputs .index-setting-input {
+      width: 80px;
+    }
+    .index-expiration-inputs .input-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="settings-container">
+    <div class="settings-title">Settings</div>
+    
+    <div class="settings-section">
+      <div class="settings-section-title">General</div>
+      
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Show favicon</div>
+          <div class="settings-description">Display website icons</div>
+        </div>
+        <div class="toggle-switch active" id="showFavicon" data-setting="showFavicon"></div>
+      </div>
+      
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Tab sound</div>
+          <div class="settings-description">Show Playing icon</div>
+        </div>
+        <div class="toggle-switch active" id="showAudio" data-setting="showAudio"></div>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <div class="settings-section-title">Behavior</div>
+      
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Close popup</div>
+          <div class="settings-description">After selecting a tab</div>
+        </div>
+        <div class="toggle-switch active" id="closeOnSelect" data-setting="closeOnSelect"></div>
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Page content search</div>
+          <div class="settings-description">Index and search page</div>
+        </div>
+        <div class="toggle-switch active" id="enablePageSearch" data-setting="enablePageSearch"></div>
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Max search results</div>
+          <div class="settings-description">Maximum results to display per search</div>
+        </div>
+        <input type="number" id="maxSearchResults" class="max-results-input" data-setting="maxSearchResults" min="5" max="50" value="15">
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Index expiration time</div>
+          <div class="settings-description">Time before indexed data is deleted</div>
+        </div>
+        <div class="index-expiration-inputs">
+          <input type="number" id="indexExpirationDays" class="index-setting-input" data-setting="indexExpirationDays" min="0" max="365" value="3">
+          <span class="input-label">days</span>
+          <input type="number" id="indexExpirationHours" class="index-setting-input" data-setting="indexExpirationHours" min="0" max="23" value="0">
+          <span class="input-label">hours</span>
+          <input type="number" id="indexExpirationMinutes" class="index-setting-input" data-setting="indexExpirationMinutes" min="0" max="59" value="0">
+          <span class="input-label">min</span>
+        </div>
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Max characters per indexed item</div>
+          <div class="settings-description">Number of characters to index from each page element</div>
+        </div>
+        <input type="number" id="maxIndexChars" class="index-setting-input" data-setting="maxIndexChars" min="50" max="1000" value="250">
+      </div>
+    </div>
+    
+    <div class="version-info">
+      YouTabs v1.0.0<br>
+      Extension for Firefox<br>
+      <a href="https://github.com/aidsoul/youtabs" target="_blank">GitHub</a>
+    </div>
+  </div>
+  
+  <script src="settings.js"></script>
+</body>
+</html>

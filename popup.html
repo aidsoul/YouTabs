@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTabs</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body style="width: 100%; height: 100%; margin: 0; padding: 0;">
+  <div class="you-tabs-container">
+    <div class="tabs-header">
+      <span class="tabs-title">YouTabs</span>
+      <div class="search-container">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search..." autocomplete="off">
+        <button class="search-clear" id="searchClear" title="Clear">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button class="search-filter" id="searchFilter" title="Filter">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+        </button>
+      </div>
+      <div class="tabs-actions">
+        <span class="tab-count" id="tabCount">0</span>
+        <button class="settings-btn" id="settingsBtn" title="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    
+    <div class="tabs-actions-panel">
+      <div class="action-buttons-left">
+        <button class="action-btn" id="closeAllBtn" title="Close all">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+        <button class="action-btn" id="closeOthersBtn" title="Close others">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13.5 6H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8.5"/>
+            <path d="M18 6L12 12M18 6l-6 6"/>
+          </svg>
+        </button>
+        <button class="action-btn" id="closeLeftBtn" title="Close left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
+          </svg>
+        </button>
+        <button class="action-btn" id="closeRightBtn" title="Close right">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+          </svg>
+        </button>
+      </div>
+      <button class="action-btn index-all-btn" id="indexAllBtn" title="Index all tabs">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+          <path d="M11 8v6M8 11h6"/>
+        </svg>
+      </button>
+      <button class="action-btn" id="clearIndexBtn" title="Clear indexed data">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+        </svg>
+      </button>
+        <button class="action-btn" id="refreshAllBtn" title="Update all">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+    </div>
+    
+    <div class="tabs-scroll-container" id="tabsScrollContainer">
+      <div class="tabs-list" id="tabsList">
+        <!-- Tabs will be dynamically inserted here -->
+      </div>
+    </div>
+    
+    <div class="tabs-footer">
+    </div>
+  </div>
+  
+  <!-- Tab preview tooltip -->
+  <div class="tab-preview" id="tabPreview">
+    <div class="preview-title"></div>
+    <div class="preview-url"></div>
+  </div>
+
+  <!-- Filter Modal -->
+  <div class="modal-overlay" id="filterModalOverlay">
+    <div class="custom-modal filter-modal">
+      <div class="modal-header">
+        <span class="modal-title">Search Filter</span>
+        <button class="modal-close" id="filterModalClose">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="filter-section">
+          <span class="filter-label">Search in:</span>
+          <label class="filter-checkbox-label">
+            <input type="checkbox" id="filterTabs" checked>
+            <span>Tabs</span>
+          </label>
+        </div>
+        <div class="filter-section">
+          <span class="filter-label">Headings:</span>
+          <div class="filter-dropdown" id="filterHeadingsDropdown">
+            <div class="filter-dropdown-trigger" id="filterHeadingsTrigger">
+              <span>Select types<span class="filter-selected-count" id="filterHeadingsCount"></span></span>
+              <svg class="filter-dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+            <div class="filter-dropdown-menu" id="filterHeadingsMenu" data-generated="true">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-cancel filter-reset-btn" id="filterResetBtn">Reset</button>
+        <button class="modal-btn modal-btn-confirm filter-apply-btn" id="filterApplyBtn">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    console.log('popup.html: Script loaded');
+  </script>
+  
+  <script src="db.js"></script>
+  <script src="tabs-core.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
