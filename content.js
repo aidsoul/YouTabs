@@ -294,7 +294,259 @@ function getSelectorForType(type, id) {
     }
     return null;
   }
-  
+
+  // Table
+  if (type === 'table') {
+    const index = parseInt(id.replace('table-', ''));
+    if (!isNaN(index)) {
+      const tables = document.querySelectorAll('table');
+      if (tables[index]) {
+        return getPathTo(tables[index]);
+      }
+    }
+    return null;
+  }
+
+  // Section
+  if (type === 'section') {
+    const index = parseInt(id.replace('section-', ''));
+    if (!isNaN(index)) {
+      const sections = document.querySelectorAll('section');
+      if (sections[index]) {
+        return getPathTo(sections[index]);
+      }
+    }
+    return null;
+  }
+
+  // Article
+  if (type === 'article') {
+    const index = parseInt(id.replace('article-', ''));
+    if (!isNaN(index)) {
+      const articles = document.querySelectorAll('article');
+      if (articles[index]) {
+        return getPathTo(articles[index]);
+      }
+    }
+    return null;
+  }
+
+  // Aside
+  if (type === 'aside') {
+    const index = parseInt(id.replace('aside-', ''));
+    if (!isNaN(index)) {
+      const asides = document.querySelectorAll('aside');
+      if (asides[index]) {
+        return getPathTo(asides[index]);
+      }
+    }
+    return null;
+  }
+
+  // Nav
+  if (type === 'nav') {
+    const index = parseInt(id.replace('nav-', ''));
+    if (!isNaN(index)) {
+      const navs = document.querySelectorAll('nav');
+      if (navs[index]) {
+        return getPathTo(navs[index]);
+      }
+    }
+    return null;
+  }
+
+  // Footer
+  if (type === 'footer') {
+    const index = parseInt(id.replace('footer-', ''));
+    if (!isNaN(index)) {
+      const footers = document.querySelectorAll('footer');
+      if (footers[index]) {
+        return getPathTo(footers[index]);
+      }
+    }
+    return null;
+  }
+
+  // Header (HTML element)
+  if (type === 'header') {
+    const index = parseInt(id.replace('header-', ''));
+    if (!isNaN(index)) {
+      const headers = document.querySelectorAll('header');
+      if (headers[index]) {
+        return getPathTo(headers[index]);
+      }
+    }
+    return null;
+  }
+
+  // Blockquote
+  if (type === 'blockquote') {
+    const index = parseInt(id.replace('blockquote-', ''));
+    if (!isNaN(index)) {
+      const blockquotes = document.querySelectorAll('blockquote');
+      if (blockquotes[index]) {
+        return getPathTo(blockquotes[index]);
+      }
+    }
+    return null;
+  }
+
+  // Code
+  if (type === 'code') {
+    const index = parseInt(id.replace('code-', ''));
+    if (!isNaN(index)) {
+      const codes = document.querySelectorAll('code');
+      if (codes[index]) {
+        return getPathTo(codes[index]);
+      }
+    }
+    return null;
+  }
+
+  // Pre
+  if (type === 'pre') {
+    const index = parseInt(id.replace('pre-', ''));
+    if (!isNaN(index)) {
+      const pres = document.querySelectorAll('pre');
+      if (pres[index]) {
+        return getPathTo(pres[index]);
+      }
+    }
+    return null;
+  }
+
+  // Cite
+  if (type === 'cite') {
+    const index = parseInt(id.replace('cite-', ''));
+    if (!isNaN(index)) {
+      const cites = document.querySelectorAll('cite');
+      if (cites[index]) {
+        return getPathTo(cites[index]);
+      }
+    }
+    return null;
+  }
+
+  // Abbr
+  if (type === 'abbr') {
+    const index = parseInt(id.replace('abbr-', ''));
+    if (!isNaN(index)) {
+      const abbrs = document.querySelectorAll('abbr');
+      if (abbrs[index]) {
+        return getPathTo(abbrs[index]);
+      }
+    }
+    return null;
+  }
+
+  // Time
+  if (type === 'time') {
+    const index = parseInt(id.replace('time-', ''));
+    if (!isNaN(index)) {
+      const times = document.querySelectorAll('time');
+      if (times[index]) {
+        return getPathTo(times[index]);
+      }
+    }
+    return null;
+  }
+
+  // Mark
+  if (type === 'mark') {
+    const index = parseInt(id.replace('mark-', ''));
+    if (!isNaN(index)) {
+      const marks = document.querySelectorAll('mark');
+      if (marks[index]) {
+        return getPathTo(marks[index]);
+      }
+    }
+    return null;
+  }
+
+  // Button
+  if (type === 'button') {
+    const index = parseInt(id.replace('button-', ''));
+    if (!isNaN(index)) {
+      const buttons = document.querySelectorAll('button');
+      if (buttons[index]) {
+        return getPathTo(buttons[index]);
+      }
+    }
+    return null;
+  }
+
+  // Textarea
+  if (type === 'textarea') {
+    const index = parseInt(id.replace('textarea-', ''));
+    if (!isNaN(index)) {
+      const textareas = document.querySelectorAll('textarea');
+      if (textareas[index]) {
+        return getPathTo(textareas[index]);
+      }
+    }
+    return null;
+  }
+
+  // Select
+  if (type === 'select') {
+    const index = parseInt(id.replace('select-', ''));
+    if (!isNaN(index)) {
+      const selects = document.querySelectorAll('select');
+      if (selects[index]) {
+        return getPathTo(selects[index]);
+      }
+    }
+    return null;
+  }
+
+  // Label
+  if (type === 'label') {
+    const index = parseInt(id.replace('label-', ''));
+    if (!isNaN(index)) {
+      const labels = document.querySelectorAll('label');
+      if (labels[index]) {
+        return getPathTo(labels[index]);
+      }
+    }
+    return null;
+  }
+
+  // Figure
+  if (type === 'figure') {
+    const index = parseInt(id.replace('figure-', ''));
+    if (!isNaN(index)) {
+      const figures = document.querySelectorAll('figure');
+      if (figures[index]) {
+        return getPathTo(figures[index]);
+      }
+    }
+    return null;
+  }
+
+  // Details
+  if (type === 'details') {
+    const index = parseInt(id.replace('details-', ''));
+    if (!isNaN(index)) {
+      const details = document.querySelectorAll('details');
+      if (details[index]) {
+        return getPathTo(details[index]);
+      }
+    }
+    return null;
+  }
+
+  // Summary
+  if (type === 'summary') {
+    const index = parseInt(id.replace('summary-', ''));
+    if (!isNaN(index)) {
+      const summaries = document.querySelectorAll('summary');
+      if (summaries[index]) {
+        return getPathTo(summaries[index]);
+      }
+    }
+    return null;
+  }
+
   return null;
 }
 
@@ -739,5 +991,324 @@ function extractPageHeadings() {
     });
   });
   
+  // Extract <section> tags with text content
+  const MAX_SECTIONS = 30;
+  const sectionElements = document.querySelectorAll('section');
+  const sectionArray = Array.from(sectionElements).slice(0, MAX_SECTIONS);
+  sectionArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'section-' + index,
+        text: text,
+        type: 'section',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <article> tags with text content
+  const MAX_ARTICLES = 20;
+  const articleElements = document.querySelectorAll('article');
+  const articleArray = Array.from(articleElements).slice(0, MAX_ARTICLES);
+  articleArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'article-' + index,
+        text: text,
+        type: 'article',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <aside> tags with text content
+  const MAX_ASIDES = 15;
+  const asideElements = document.querySelectorAll('aside');
+  const asideArray = Array.from(asideElements).slice(0, MAX_ASIDES);
+  asideArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'aside-' + index,
+        text: text,
+        type: 'aside',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <nav> tags with text content
+  const MAX_NAVS = 10;
+  const navElements = document.querySelectorAll('nav');
+  const navArray = Array.from(navElements).slice(0, MAX_NAVS);
+  navArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'nav-' + index,
+        text: text,
+        type: 'nav',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <footer> tags with text content
+  const MAX_FOOTERS = 10;
+  const footerElements = document.querySelectorAll('footer');
+  const footerArray = Array.from(footerElements).slice(0, MAX_FOOTERS);
+  footerArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'footer-' + index,
+        text: text,
+        type: 'footer',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <header> tags with text content
+  const MAX_HEADERS = 10;
+  const headerHtmlElements = document.querySelectorAll('header');
+  const headerArray = Array.from(headerHtmlElements).slice(0, MAX_HEADERS);
+  headerArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'header-' + index,
+        text: text,
+        type: 'header',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <blockquote> tags
+  const blockquoteElements = document.querySelectorAll('blockquote');
+  blockquoteElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'blockquote-' + index,
+        text: text,
+        type: 'blockquote',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <code> tags
+  const codeElements = document.querySelectorAll('code');
+  codeElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'code-' + index,
+        text: text,
+        type: 'code',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <pre> tags
+  const preElements = document.querySelectorAll('pre');
+  preElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'pre-' + index,
+        text: text,
+        type: 'pre',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <cite> tags
+  const citeElements = document.querySelectorAll('cite');
+  citeElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'cite-' + index,
+        text: text,
+        type: 'cite',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <abbr> tags (title attribute)
+  const abbrElements = document.querySelectorAll('abbr');
+  abbrElements.forEach((element, index) => {
+    const title = element.getAttribute('title');
+    const text = truncate(title || element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'abbr-' + index,
+        text: text,
+        type: 'abbr',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <time> tags (datetime attribute)
+  const timeElements = document.querySelectorAll('time');
+  timeElements.forEach((element, index) => {
+    const datetime = element.getAttribute('datetime');
+    const text = truncate(datetime || element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'time-' + index,
+        text: text,
+        type: 'time',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <mark> tags
+  const markElements = document.querySelectorAll('mark');
+  markElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'mark-' + index,
+        text: text,
+        type: 'mark',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <button> tags
+  const buttonElements = document.querySelectorAll('button');
+  buttonElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    const value = element.value;
+    if (text || value) {
+      headings.push({
+        id: 'button-' + index,
+        text: text || value,
+        type: 'button',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <textarea> tags
+  const textareaElements = document.querySelectorAll('textarea');
+  textareaElements.forEach((element, index) => {
+    const placeholder = element.getAttribute('placeholder');
+    const name = element.name || element.id || 'Textarea';
+    if (placeholder) {
+      headings.push({
+        id: 'textarea-' + index,
+        text: truncate(placeholder),
+        type: 'textarea',
+        url: window.location.href
+      });
+    } else {
+      headings.push({
+        id: 'textarea-' + index,
+        text: truncate(name),
+        type: 'textarea',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <select> tags
+  const selectElements = document.querySelectorAll('select');
+  selectElements.forEach((element, index) => {
+    const name = element.name || element.id || 'Select';
+    const options = [];
+    element.querySelectorAll('option').forEach(opt => {
+      const optText = truncate(opt.textContent);
+      if (optText) {
+        options.push(optText);
+      }
+    });
+    headings.push({
+      id: 'select-' + index,
+      text: options.length > 0 ? options.join(', ') : name,
+      type: 'select',
+      url: window.location.href
+    });
+  });
+  
+  // Extract <label> tags
+  const labelElements = document.querySelectorAll('label');
+  labelElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'label-' + index,
+        text: text,
+        type: 'label',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <figure> tags with figcaption
+  const figureElements = document.querySelectorAll('figure');
+  figureElements.forEach((element, index) => {
+    const figcaption = element.querySelector('figcaption');
+    const figcaptionText = figcaption ? truncate(figcaption.textContent) : '';
+    
+    // Get img src if available
+    const img = element.querySelector('img');
+    const imgSrc = img ? img.src : '';
+    
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'figure-' + index,
+        text: figcaptionText || text,
+        type: 'figure',
+        url: window.location.href,
+        imgUrl: imgSrc
+      });
+    }
+  });
+  
+  // Extract <details> tags
+  const detailsElements = document.querySelectorAll('details');
+  detailsElements.forEach((element, index) => {
+    const summary = element.querySelector('summary');
+    const summaryText = summary ? truncate(summary.textContent) : '';
+    const text = truncate(element.textContent);
+    
+    if (summaryText || (text && text.length > 2)) {
+      headings.push({
+        id: 'details-' + index,
+        text: summaryText || text,
+        type: 'details',
+        url: window.location.href
+      });
+    }
+  });
+  
+  // Extract <summary> tags
+  const summaryElements = document.querySelectorAll('summary');
+  summaryElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'summary-' + index,
+        text: text,
+        type: 'summary',
+        url: window.location.href
+      });
+    }
+  });
+
   return headings;
 }

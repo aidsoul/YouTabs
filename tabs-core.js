@@ -219,6 +219,361 @@ function extractHeadings(settings) {
     }
   });
   
+  // Extract <span> tags with text content (limit to prevent performance issues)
+  const MAX_SPANS = 100;
+  const spanElements = document.querySelectorAll('span');
+  const spanArray = Array.from(spanElements).slice(0, MAX_SPANS);
+  spanArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'span-' + index,
+        text: text,
+        type: 'span',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <table> tags with headers and captions
+  const tableElements = document.querySelectorAll('table');
+  tableElements.forEach((element, index) => {
+    const caption = element.querySelector('caption');
+    const captionText = caption ? truncate(caption.textContent) : '';
+    const headers = [];
+    const headerCells = element.querySelectorAll('th');
+    headerCells.forEach(th => {
+      const headerText = truncate(th.textContent);
+      if (headerText) headers.push(headerText);
+    });
+    const firstRow = element.querySelector('tr');
+    let previewText = '';
+    if (firstRow) {
+      const cells = firstRow.querySelectorAll('td, th');
+      const cellTexts = [];
+      cells.forEach(cell => {
+        const cellText = truncate(cell.textContent);
+        if (cellText) cellTexts.push(cellText);
+      });
+      previewText = cellTexts.join(' | ');
+    }
+    const rowCount = element.querySelectorAll('tr').length;
+    headings.push({
+      id: 'table-' + index,
+      text: captionText || previewText || 'Table ' + (index + 1),
+      type: 'table',
+      url: window.location.href,
+      tableCaption: captionText,
+      tableHeaders: headers,
+      tablePreview: previewText,
+      tableRows: rowCount
+    });
+  });
+
+  // Extract <section> tags with text content
+  const MAX_SECTIONS = 30;
+  const sectionElements = document.querySelectorAll('section');
+  const sectionArray = Array.from(sectionElements).slice(0, MAX_SECTIONS);
+  sectionArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'section-' + index,
+        text: text,
+        type: 'section',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <article> tags with text content
+  const MAX_ARTICLES = 20;
+  const articleElements = document.querySelectorAll('article');
+  const articleArray = Array.from(articleElements).slice(0, MAX_ARTICLES);
+  articleArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'article-' + index,
+        text: text,
+        type: 'article',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <aside> tags with text content
+  const MAX_ASIDES = 15;
+  const asideElements = document.querySelectorAll('aside');
+  const asideArray = Array.from(asideElements).slice(0, MAX_ASIDES);
+  asideArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'aside-' + index,
+        text: text,
+        type: 'aside',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <nav> tags with text content
+  const MAX_NAVS = 10;
+  const navElements = document.querySelectorAll('nav');
+  const navArray = Array.from(navElements).slice(0, MAX_NAVS);
+  navArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'nav-' + index,
+        text: text,
+        type: 'nav',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <footer> tags with text content
+  const MAX_FOOTERS = 10;
+  const footerElements = document.querySelectorAll('footer');
+  const footerArray = Array.from(footerElements).slice(0, MAX_FOOTERS);
+  footerArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'footer-' + index,
+        text: text,
+        type: 'footer',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <header> tags with text content
+  const MAX_HEADERS_HTML = 10;
+  const headerHtmlElements = document.querySelectorAll('header');
+  const headerArray = Array.from(headerHtmlElements).slice(0, MAX_HEADERS_HTML);
+  headerArray.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'header-' + index,
+        text: text,
+        type: 'header',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <blockquote> tags
+  const blockquoteElements = document.querySelectorAll('blockquote');
+  blockquoteElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'blockquote-' + index,
+        text: text,
+        type: 'blockquote',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <code> tags
+  const codeElements = document.querySelectorAll('code');
+  codeElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'code-' + index,
+        text: text,
+        type: 'code',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <pre> tags
+  const preElements = document.querySelectorAll('pre');
+  preElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'pre-' + index,
+        text: text,
+        type: 'pre',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <cite> tags
+  const citeElements = document.querySelectorAll('cite');
+  citeElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'cite-' + index,
+        text: text,
+        type: 'cite',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <abbr> tags (title attribute)
+  const abbrElements = document.querySelectorAll('abbr');
+  abbrElements.forEach((element, index) => {
+    const title = element.getAttribute('title');
+    const text = truncate(title || element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'abbr-' + index,
+        text: text,
+        type: 'abbr',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <time> tags (datetime attribute)
+  const timeElements = document.querySelectorAll('time');
+  timeElements.forEach((element, index) => {
+    const datetime = element.getAttribute('datetime');
+    const text = truncate(datetime || element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'time-' + index,
+        text: text,
+        type: 'time',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <mark> tags
+  const markElements = document.querySelectorAll('mark');
+  markElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'mark-' + index,
+        text: text,
+        type: 'mark',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <button> tags
+  const buttonElements = document.querySelectorAll('button');
+  buttonElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    const value = element.value;
+    if (text || value) {
+      headings.push({
+        id: 'button-' + index,
+        text: text || value,
+        type: 'button',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <textarea> tags
+  const textareaElements = document.querySelectorAll('textarea');
+  textareaElements.forEach((element, index) => {
+    const placeholder = element.getAttribute('placeholder');
+    const name = element.name || element.id || 'Textarea';
+    headings.push({
+      id: 'textarea-' + index,
+      text: truncate(placeholder || name),
+      type: 'textarea',
+      url: window.location.href
+    });
+  });
+
+  // Extract <select> tags
+  const selectElements = document.querySelectorAll('select');
+  selectElements.forEach((element, index) => {
+    const name = element.name || element.id || 'Select';
+    const options = [];
+    element.querySelectorAll('option').forEach(opt => {
+      const optText = truncate(opt.textContent);
+      if (optText) options.push(optText);
+    });
+    headings.push({
+      id: 'select-' + index,
+      text: options.length > 0 ? options.join(', ') : name,
+      type: 'select',
+      url: window.location.href
+    });
+  });
+
+  // Extract <label> tags
+  const labelElements = document.querySelectorAll('label');
+  labelElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'label-' + index,
+        text: text,
+        type: 'label',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <figure> tags with figcaption
+  const figureElements = document.querySelectorAll('figure');
+  figureElements.forEach((element, index) => {
+    const figcaption = element.querySelector('figcaption');
+    const figcaptionText = figcaption ? truncate(figcaption.textContent) : '';
+    const img = element.querySelector('img');
+    const imgSrc = img ? img.src : '';
+    const text = truncate(element.textContent);
+    if (text && text.length > 2) {
+      headings.push({
+        id: 'figure-' + index,
+        text: figcaptionText || text,
+        type: 'figure',
+        url: window.location.href,
+        imgUrl: imgSrc
+      });
+    }
+  });
+
+  // Extract <details> tags
+  const detailsElements = document.querySelectorAll('details');
+  detailsElements.forEach((element, index) => {
+    const summary = element.querySelector('summary');
+    const summaryText = summary ? truncate(summary.textContent) : '';
+    const text = truncate(element.textContent);
+    if (summaryText || (text && text.length > 2)) {
+      headings.push({
+        id: 'details-' + index,
+        text: summaryText || text,
+        type: 'details',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract <summary> tags
+  const summaryElements = document.querySelectorAll('summary');
+  summaryElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text && text.length > 0) {
+      headings.push({
+        id: 'summary-' + index,
+        text: text,
+        type: 'summary',
+        url: window.location.href
+      });
+    }
+  });
+
   return headings;
 }
 
@@ -299,7 +654,28 @@ class YouTabsCore {
     { value: 'video', label: 'Videos' },
     { value: 'audio', label: 'Audio' },
     { value: 'iframe', label: 'IFrames (Video)' },
-    { value: 'span', label: 'Spans' }
+    { value: 'span', label: 'Spans' },
+    { value: 'table', label: 'Tables' },
+    { value: 'section', label: 'Sections' },
+    { value: 'article', label: 'Articles' },
+    { value: 'aside', label: 'Asides' },
+    { value: 'nav', label: 'Navigation' },
+    { value: 'footer', label: 'Footers' },
+    { value: 'header', label: 'Headers' },
+    { value: 'blockquote', label: 'Blockquotes' },
+    { value: 'code', label: 'Code' },
+    { value: 'pre', label: 'Preformatted' },
+    { value: 'cite', label: 'Citations' },
+    { value: 'abbr', label: 'Abbreviations' },
+    { value: 'time', label: 'Time' },
+    { value: 'mark', label: 'Highlighted' },
+    { value: 'button', label: 'Buttons' },
+    { value: 'textarea', label: 'Textareas' },
+    { value: 'select', label: 'Selects' },
+    { value: 'label', label: 'Labels' },
+    { value: 'figure', label: 'Figures' },
+    { value: 'details', label: 'Details' },
+    { value: 'summary', label: 'Summary' }
   ];
   
   static getFilterTypeHTML(checked = true) {
@@ -326,7 +702,7 @@ class YouTabsCore {
     
     // Search filter state
     this.filterTabs = true;
-    this.filterHeadingTypes = ['heading', 'paragraph', 'link', 'image', 'div', 'ul', 'ol', 'li', 'input', 'video', 'audio', 'iframe', 'span'];
+    this.filterHeadingTypes = ['heading', 'paragraph', 'link', 'image', 'div', 'ul', 'ol', 'li', 'input', 'video', 'audio', 'iframe', 'span', 'table', 'section', 'article', 'aside', 'nav', 'footer', 'header', 'blockquote', 'code', 'pre', 'cite', 'abbr', 'time', 'mark', 'button', 'textarea', 'select', 'label', 'figure', 'details', 'summary'];
     this.totalFilterTypes = this.filterHeadingTypes.length;
     this.hasActiveFilter = false;
     
@@ -345,7 +721,9 @@ class YouTabsCore {
       enableGrouping: true,
       groupingType: 'custom',
       collapsedGroups: [],
-      collapsedTabs: []
+      collapsedTabs: [],
+      // Action buttons panel
+      enableActionButtonsLeft: false
     };
     
     // Custom user groups
@@ -416,6 +794,9 @@ class YouTabsCore {
     // Load settings
     await this.loadSettings();
     
+    // Update action buttons visibility based on settings
+    this.updateActionButtonsVisibility();
+    
     // Load page headings from storage
     await this.loadPageHeadings();
     
@@ -433,6 +814,20 @@ class YouTabsCore {
     
     // Start periodic cleanup of expired page headings
     this.startExpiredPageHeadingsCleanup();
+  }
+  
+  // Update action buttons left panel visibility based on settings
+  updateActionButtonsVisibility() {
+    const actionButtonsLeft = document.querySelectorAll('.action-buttons-left');
+    const enabled = this.settings?.enableActionButtonsLeft ?? false;
+    
+    actionButtonsLeft.forEach(el => {
+      if (enabled) {
+        el.classList.add('visible');
+      } else {
+        el.classList.remove('visible');
+      }
+    });
   }
   
   // Calculate expiration time in milliseconds from settings
@@ -1254,6 +1649,11 @@ class YouTabsCore {
       if (changes.settings) {
         const oldSettings = this.settings;
         this.settings = { ...this.settings, ...(changes.settings?.newValue || {}) };
+        
+        // Update action buttons visibility if setting changed
+        if (oldSettings.enableActionButtonsLeft !== this.settings.enableActionButtonsLeft) {
+          this.updateActionButtonsVisibility();
+        }
         
         // Check if index expiration settings changed - run cleanup
         const expirationKeys = ['indexExpirationDays', 'indexExpirationHours', 'indexExpirationMinutes'];
@@ -2589,7 +2989,29 @@ class YouTabsCore {
         'fileDownload': 'Downloads',
         'video': 'Videos',
         'audio': 'Audio',
-        'videoEmbed': 'Embedded Videos'
+        'videoEmbed': 'Embedded Videos',
+        'span': 'Spans',
+        'table': 'Tables',
+        'section': 'Sections',
+        'article': 'Articles',
+        'aside': 'Asides',
+        'nav': 'Navigation',
+        'footer': 'Footers',
+        'header': 'Headers',
+        'blockquote': 'Blockquotes',
+        'code': 'Code',
+        'pre': 'Preformatted',
+        'cite': 'Citations',
+        'abbr': 'Abbreviations',
+        'time': 'Time',
+        'mark': 'Highlighted',
+        'button': 'Buttons',
+        'textarea': 'Textareas',
+        'select': 'Selects',
+        'label': 'Labels',
+        'figure': 'Figures',
+        'details': 'Details',
+        'summary': 'Summary'
       };
       
       this.headingSearchResults.forEach((result) => {
