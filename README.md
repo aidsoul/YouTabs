@@ -111,14 +111,3 @@ All data is stored locally using IndexedDB:
 - **Page Index** — Indexed content from visited pages including headings, paragraphs, links, and custom-added text
 
 No data is sent to external servers — everything stays on your device.
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| Ctrl+F | Focus search input |
-| Escape | Clear search |
-
-## Version
-
-1.0.0

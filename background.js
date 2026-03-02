@@ -432,6 +432,15 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Handle incremental index updates from content script
 async function handleIncrementalIndexUpdate(url, changes) {
   try {
+    // Check if YouTabsDB is available
+    if (!window.YouTabsDB || !window.YouTabsDB.isIndexedDBAvailable()) {
+      console.error('handleIncrementalIndexUpdate: YouTabsDB is not available');
+      return { success: false, error: 'Database not available' };
+    }
+
+    // Ensure database is opened
+    await window.YouTabsDB.openDatabase();
+    
     // Normalize URL for consistent matching
     const urlKey = getUrlKey(url);
     
