@@ -310,10 +310,8 @@ const urlObserver = new MutationObserver(() => {
   if (window.location.href !== lastUrl) {
     lastUrl = window.location.href;
     console.log('YouTabs: URL changed to', lastUrl);
-    // Stop current observer and rebuild for new page
-    stopObserving();
+    // Reset headings map for new page
     currentHeadingsMap = buildHeadingsMap();
-    startObserving();
   }
 });
 
