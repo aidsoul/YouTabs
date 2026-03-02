@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'YouTabsDB';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const STORE_CUSTOM_GROUPS = 'customGroups';
 const STORE_GROUP_TAB_METADATA = 'groupTabMetadata';
 const STORE_PAGES_INDEX = 'pagesIndex';
@@ -57,7 +57,9 @@ function openDatabase() {
       if (db.objectStoreNames.contains(STORE_PAGES_INDEX)) {
         db.deleteObjectStore(STORE_PAGES_INDEX);
       }
-      db.createObjectStore(STORE_PAGES_INDEX, { keyPath: 'url' });
+      const pagesIndexStore = db.createObjectStore(STORE_PAGES_INDEX, { keyPath: 'url' });
+      // Add secondary index on indexedAt for efficient expiration cleanup
+      pagesIndexStore.createIndex('indexedAt', 'indexedAt', { unique: false });
     };
   });
 }
@@ -307,7 +309,7 @@ async function getAllPages() {
 /**
  * Get pagesIndex by URL from IndexedDB
  * @param {string} urlKey - The normalized URL key
- * @returns {Promise<Object|null>} - Returns {headings, indexedAt} or null if not found
+ * @returns {Promise<Object|null>} - Returns {headings, indexedAt, lastIncrementalUpdate} or null if not found
  */
 async function getPagesIndexByUrl(urlKey) {
   const db = await openDatabase();
@@ -320,7 +322,11 @@ async function getPagesIndexByUrl(urlKey) {
     request.onsuccess = () => {
       const result = request.result;
       if (result) {
-        resolve({ headings: result.headings, indexedAt: result.indexedAt });
+        resolve({ 
+          headings: result.headings, 
+          indexedAt: result.indexedAt,
+          lastIncrementalUpdate: result.lastIncrementalUpdate || null
+        });
       } else {
         resolve(null);
       }
@@ -378,33 +384,63 @@ async function deletePage(tabId) {
  * @param {string} url - The page URL
  * @param {number} tabId - The tab ID
  * @param {Array} headings - Array of headings to store
+ * @param {boolean} isIncremental - If true, preserves existing indexedAt timestamp
  */
-async function savePageHeadingsByUrl(url, tabId, headings) {
+async function savePageHeadingsByUrl(url, tabId, headings, isIncremental = false) {
   const db = await openDatabase();
   
+  // Normalize URL to create a consistent key
+  let urlKey = url;
+  try {
+    const urlObj = new URL(url);
+    urlKey = urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+  } catch (e) {
+    // Use original URL if parsing fails
+  }
+  
+  const timestamp = Date.now();
+  
+  // If incremental update, first get existing data to preserve indexedAt
+  if (isIncremental) {
+    const existingData = await new Promise((resolve, reject) => {
+      const getTransaction = db.transaction([STORE_PAGES_INDEX], 'readonly');
+      const getStore = getTransaction.objectStore(STORE_PAGES_INDEX);
+      const getRequest = getStore.get(urlKey);
+      
+      getRequest.onsuccess = () => resolve(getRequest.result);
+      getRequest.onerror = () => resolve(null);
+    });
+    
+    const existingIndexedAt = existingData?.indexedAt || timestamp;
+    
+    // Now save with the existing indexedAt
+    return new Promise((resolve, reject) => {
+      const saveTransaction = db.transaction([STORE_PAGES_INDEX], 'readwrite');
+      const saveStore = saveTransaction.objectStore(STORE_PAGES_INDEX);
+      
+      saveStore.put({ 
+        url: urlKey, 
+        headings: headings, 
+        indexedAt: existingIndexedAt,
+        lastIncrementalUpdate: timestamp
+      });
+      
+      saveTransaction.oncomplete = () => resolve();
+      saveTransaction.onerror = () => {
+        console.error('IndexedDB: Failed to save incremental update', saveTransaction.error);
+        reject(saveTransaction.error);
+      };
+    });
+  }
+  
+  // Regular (full) index
   return new Promise((resolve, reject) => {
-    // Normalize URL to create a consistent key
-    let urlKey = url;
-    try {
-      const urlObj = new URL(url);
-      urlKey = urlObj.origin + urlObj.pathname.replace(/\/$/, '');
-    } catch (e) {
-      // Use original URL if parsing fails
-    }
-    
-    const timestamp = Date.now();
-    
-    // Use only pagesIndex store (pages table removed)
     const transaction = db.transaction([STORE_PAGES_INDEX], 'readwrite');
     const pagesIndexStore = transaction.objectStore(STORE_PAGES_INDEX);
     
-    // Save page headings with urlKey as key
     pagesIndexStore.put({ url: urlKey, headings: headings, indexedAt: timestamp });
-
-    transaction.oncomplete = () => {
-      resolve();
-    };
-
+    
+    transaction.oncomplete = () => resolve();
     transaction.onerror = () => {
       console.error('IndexedDB: Failed to save page headings', transaction.error);
       reject(transaction.error);
@@ -460,15 +496,43 @@ async function deletePagesIndexByTabId(urlKey) {
  */
 async function cleanupExpiredPagesIndex(expirationMs = 259200000) {
   try {
-    const pageIndexWithTimestamp = await getPagesIndexWithTimestamp();
+    const db = await openDatabase();
     const now = Date.now();
+    const expirationThreshold = now - expirationMs;
     
-    for (const [urlKey, data] of Object.entries(pageIndexWithTimestamp)) {
-      if (data.indexedAt && (now - data.indexedAt > expirationMs)) {
-        await deletePagesIndexByTabId(urlKey);
-        console.log(`IndexedDB: Cleaned up expired pagesIndex for ${urlKey}`);
-      }
-    }
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_PAGES_INDEX], 'readwrite');
+      const store = transaction.objectStore(STORE_PAGES_INDEX);
+      
+      // Use the indexedAt index to efficiently query records up to expiration threshold
+      const index = store.index('indexedAt');
+      const range = IDBKeyRange.upperBound(expirationThreshold);
+      const request = index.openCursor(range);
+      
+      let deletedCount = 0;
+      
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          // Delete the expired record
+          cursor.delete();
+          deletedCount++;
+          console.log(`IndexedDB: Cleaned up expired pagesIndex for ${cursor.value.url}`);
+          // Continue to next record
+          cursor.continue();
+        }
+      };
+      
+      transaction.oncomplete = () => {
+        console.log(`IndexedDB: Cleanup complete. Deleted ${deletedCount} expired entries.`);
+        resolve(deletedCount);
+      };
+      
+      transaction.onerror = () => {
+        console.error('IndexedDB: Error during cleanup', transaction.error);
+        reject(transaction.error);
+      };
+    });
   } catch (error) {
     console.error('IndexedDB: Error cleaning up expired pagesIndex', error);
   }

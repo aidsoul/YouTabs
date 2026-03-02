@@ -123,6 +123,209 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // Keep the message channel open for async response
 });
 
+// ============================================
+// Incremental Indexing with MutationObserver
+// ============================================
+
+// Track current headings for comparison
+let currentHeadingsMap = new Map();
+let observerInstance = null;
+let observerDebounceTimer = null;
+const OBSERVER_DEBOUNCE_MS = 500; // Debounce changes for 500ms
+const OBSERVER_CONFIG = {
+  childList: true,
+  subtree: true,
+  characterData: true,
+  characterDataOldValue: true
+};
+
+// Extract heading ID from element
+function getHeadingId(element, type, fallbackIndex) {
+  if (type === 'heading') {
+    if (element.id) return element.id;
+    const anchor = element.querySelector('a[id], a[name]');
+    if (anchor) return anchor.id || anchor.getAttribute('name');
+    return 'heading-' + fallbackIndex;
+  }
+  return type + '-' + fallbackIndex;
+}
+
+// Build a map of current headings for quick lookup
+function buildHeadingsMap() {
+  const map = new Map();
+  const MAX_LENGTH = 250;
+  const truncate = (text) => {
+    const trimmed = text.trim();
+    if (trimmed.length > MAX_LENGTH) {
+      return trimmed.substring(0, MAX_LENGTH - 3) + '...';
+    }
+    return trimmed;
+  };
+
+  // Track headings (h1-h6)
+  const headingElements = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  headingElements.forEach((element, index) => {
+    const text = truncate(element.textContent);
+    if (text) {
+      const id = getHeadingId(element, 'heading', index);
+      const key = 'heading-' + id;
+      map.set(key, {
+        id: id,
+        text: text,
+        level: parseInt(element.tagName.substring(1)),
+        type: 'heading',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Track meta tags
+  const metaSelectors = [
+    'meta[name="description"]',
+    'meta[name="keywords"]',
+    'meta[property="og:title"]',
+    'meta[property="og:description"]',
+    'meta[property="og:image"]',
+    'meta[property="og:url"]',
+    'meta[property="og:site_name"]',
+    'meta[name="twitter:title"]',
+    'meta[name="twitter:description"]',
+    'meta[name="twitter:image"]'
+  ];
+  // Note: Meta tags are extracted in extractPageHeadings() during full indexing
+  // to avoid duplicate extraction from both incremental and full indexing.
+  // The staged changes to extractPageHeadings() add meta tag extraction there.
+
+  return map;
+}
+
+// Compare old and new headings to find changes
+function detectHeadingChanges(oldMap, newMap) {
+  const changes = {
+    added: [],
+    modified: [],
+    removed: []
+  };
+
+  // Find added and modified headings
+  for (const [key, newHeading] of newMap) {
+    const oldHeading = oldMap.get(key);
+    if (!oldHeading) {
+      changes.added.push(newHeading);
+    } else if (oldHeading.text !== newHeading.text) {
+      changes.modified.push(newHeading);
+    }
+  }
+
+  // Find removed headings
+  for (const [key, oldHeading] of oldMap) {
+    if (!newMap.has(key)) {
+      changes.removed.push(oldHeading);
+    }
+  }
+
+  return changes;
+}
+
+// Send changes to background script
+async function sendIncrementalChanges(changes) {
+  if (changes.added.length === 0 && 
+      changes.modified.length === 0 && 
+      changes.removed.length === 0) {
+    return;
+  }
+
+  try {
+    await browser.runtime.sendMessage({
+      action: 'incrementalIndexUpdate',
+      url: window.location.href,
+      changes: changes
+    });
+    console.log('YouTabs: Sent incremental changes:', 
+      changes.added.length, 'added,', 
+      changes.modified.length, 'modified,', 
+      changes.removed.length, 'removed');
+  } catch (error) {
+    // Ignore errors if background script is not available
+    console.log('YouTabs: Could not send incremental changes:', error.message);
+  }
+}
+
+// Handle mutations with debounce
+function handleMutations() {
+  if (observerDebounceTimer) {
+    clearTimeout(observerDebounceTimer);
+  }
+
+  observerDebounceTimer = setTimeout(() => {
+    const newHeadingsMap = buildHeadingsMap();
+    const changes = detectHeadingChanges(currentHeadingsMap, newHeadingsMap);
+    
+    if (changes.added.length > 0 || changes.modified.length > 0 || changes.removed.length > 0) {
+      currentHeadingsMap = newHeadingsMap;
+      sendIncrementalChanges(changes);
+    }
+  }, OBSERVER_DEBOUNCE_MS);
+}
+
+// Start observing DOM changes
+function startObserving() {
+  if (observerInstance) {
+    console.log('YouTabs: Observer already running');
+    return;
+  }
+
+  // Build initial headings map
+  currentHeadingsMap = buildHeadingsMap();
+  console.log('YouTabs: Starting MutationObserver with', currentHeadingsMap.size, 'initial headings');
+
+  // Create and start observer
+  observerInstance = new MutationObserver(handleMutations);
+  observerInstance.observe(document.body, OBSERVER_CONFIG);
+}
+
+// Stop observing DOM changes
+function stopObserving() {
+  if (observerInstance) {
+    observerInstance.disconnect();
+    observerInstance = null;
+    console.log('YouTabs: Stopped MutationObserver');
+  }
+  if (observerDebounceTimer) {
+    clearTimeout(observerDebounceTimer);
+    observerDebounceTimer = null;
+  }
+}
+
+// Initialize observer when DOM is ready
+if (document.body) {
+  startObserving();
+} else {
+  document.addEventListener('DOMContentLoaded', startObserving);
+}
+
+// Also watch for page navigation in SPAs
+let lastUrl = window.location.href;
+const urlObserver = new MutationObserver(() => {
+  if (window.location.href !== lastUrl) {
+    lastUrl = window.location.href;
+    console.log('YouTabs: URL changed to', lastUrl);
+    // Stop current observer and rebuild for new page
+    stopObserving();
+    currentHeadingsMap = buildHeadingsMap();
+    startObserving();
+  }
+});
+
+// Start URL observer after DOM is ready
+if (document.body) {
+  urlObserver.observe(document.body, { childList: true, subtree: true });
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    urlObserver.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
 // Get CSS selector based on element type
 function getSelectorForType(type, id) {
   if (!type || !id) return null;
@@ -840,6 +1043,54 @@ function extractPageHeadings() {
     return trimmed;
   };
   
+  // Get direct text nodes only (no nested element text) - for container elements
+  // This prevents duplicate indexing when container has child elements with text
+  // Falls back to all text if no direct text nodes found
+  const getDirectText = (element) => {
+    let text = '';
+    let hasTextNodes = false;
+    for (const node of element.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        hasTextNodes = true;
+        text += node.textContent;
+      }
+    }
+    // Fallback only if no text nodes were found at all
+    if (!hasTextNodes && element.textContent) {
+      return truncate(element.textContent);
+    }
+    return truncate(text);
+  };
+  
+  // Extract <meta> tags (description, keywords, og:*, twitter:*)
+  const metaSelectors = [
+    'meta[name="description"]',
+    'meta[name="keywords"]',
+    'meta[property="og:title"]',
+    'meta[property="og:description"]',
+    'meta[property="og:image"]',
+    'meta[property="og:url"]',
+    'meta[property="og:site_name"]',
+    'meta[name="twitter:title"]',
+    'meta[name="twitter:description"]',
+    'meta[name="twitter:image"]'
+  ];
+  
+  const metaElements = document.querySelectorAll(metaSelectors.join(', '));
+  metaElements.forEach((element, index) => {
+    const content = element.getAttribute('content');
+    const name = element.getAttribute('name') || element.getAttribute('property');
+    if (content) {
+      headings.push({
+        id: 'meta-' + index,
+        text: truncate(content),
+        type: 'meta',
+        metaName: name,
+        url: window.location.origin + window.location.pathname
+      });
+    }
+  });
+  
   // Extract h1-h6 headings
   const headingElements = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
   headingElements.forEach((element, index) => {
@@ -865,8 +1116,10 @@ function extractPageHeadings() {
   });
   
   // Extract <p> tags
+  const MAX_PARAGRAPHS = 100;
   const pElements = document.querySelectorAll('p');
-  pElements.forEach((element, index) => {
+  const pArray = Array.from(pElements).slice(0, MAX_PARAGRAPHS);
+  pArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text) {
       headings.push({
@@ -879,8 +1132,10 @@ function extractPageHeadings() {
   });
   
   // Extract <a> tags with text
+  const MAX_LINKS = 100;
   const aElements = document.querySelectorAll('a');
-  aElements.forEach((element, index) => {
+  const aArray = Array.from(aElements).slice(0, MAX_LINKS);
+  aArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     const href = element.href;
     if (text || href) {
@@ -895,8 +1150,10 @@ function extractPageHeadings() {
   });
   
   // Extract <img> tags with alt text
+  const MAX_IMAGES = 50;
   const imgElements = document.querySelectorAll('img');
-  imgElements.forEach((element, index) => {
+  const imgArray = Array.from(imgElements).slice(0, MAX_IMAGES);
+  imgArray.forEach((element, index) => {
     const alt = truncate(element.alt);
     const src = element.src;
     if (alt || src) {
@@ -915,7 +1172,7 @@ function extractPageHeadings() {
   const divElements = document.querySelectorAll('div');
   const divArray = Array.from(divElements).slice(0, MAX_DIVS);
   divArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     // Only index divs with meaningful text (more than just whitespace)
     if (text && text.length > 2) {
       headings.push({
@@ -945,8 +1202,10 @@ function extractPageHeadings() {
   });
   
   // Extract <table> tags with headers and captions
+  const MAX_TABLES = 30;
   const tableElements = document.querySelectorAll('table');
-  tableElements.forEach((element, index) => {
+  const tableArray = Array.from(tableElements).slice(0, MAX_TABLES);
+  tableArray.forEach((element, index) => {
     // Get table caption if available
     const caption = element.querySelector('caption');
     const captionText = caption ? truncate(caption.textContent) : '';
@@ -996,7 +1255,7 @@ function extractPageHeadings() {
   const sectionElements = document.querySelectorAll('section');
   const sectionArray = Array.from(sectionElements).slice(0, MAX_SECTIONS);
   sectionArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'section-' + index,
@@ -1012,7 +1271,7 @@ function extractPageHeadings() {
   const articleElements = document.querySelectorAll('article');
   const articleArray = Array.from(articleElements).slice(0, MAX_ARTICLES);
   articleArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'article-' + index,
@@ -1028,7 +1287,7 @@ function extractPageHeadings() {
   const asideElements = document.querySelectorAll('aside');
   const asideArray = Array.from(asideElements).slice(0, MAX_ASIDES);
   asideArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'aside-' + index,
@@ -1044,7 +1303,7 @@ function extractPageHeadings() {
   const navElements = document.querySelectorAll('nav');
   const navArray = Array.from(navElements).slice(0, MAX_NAVS);
   navArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'nav-' + index,
@@ -1060,7 +1319,7 @@ function extractPageHeadings() {
   const footerElements = document.querySelectorAll('footer');
   const footerArray = Array.from(footerElements).slice(0, MAX_FOOTERS);
   footerArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'footer-' + index,
@@ -1076,7 +1335,7 @@ function extractPageHeadings() {
   const headerHtmlElements = document.querySelectorAll('header');
   const headerArray = Array.from(headerHtmlElements).slice(0, MAX_HEADERS);
   headerArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'header-' + index,
@@ -1088,8 +1347,10 @@ function extractPageHeadings() {
   });
   
   // Extract <blockquote> tags
+  const MAX_BLOCKQUOTES = 50;
   const blockquoteElements = document.querySelectorAll('blockquote');
-  blockquoteElements.forEach((element, index) => {
+  const blockquoteArray = Array.from(blockquoteElements).slice(0, MAX_BLOCKQUOTES);
+  blockquoteArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -1102,8 +1363,10 @@ function extractPageHeadings() {
   });
   
   // Extract <code> tags
+  const MAX_CODE = 200;
   const codeElements = document.querySelectorAll('code');
-  codeElements.forEach((element, index) => {
+  const codeArray = Array.from(codeElements).slice(0, MAX_CODE);
+  codeArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -1116,8 +1379,10 @@ function extractPageHeadings() {
   });
   
   // Extract <pre> tags
+  const MAX_PRE = 100;
   const preElements = document.querySelectorAll('pre');
-  preElements.forEach((element, index) => {
+  const preArray = Array.from(preElements).slice(0, MAX_PRE);
+  preArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -1130,8 +1395,10 @@ function extractPageHeadings() {
   });
   
   // Extract <cite> tags
+  const MAX_CITES = 30;
   const citeElements = document.querySelectorAll('cite');
-  citeElements.forEach((element, index) => {
+  const citeArray = Array.from(citeElements).slice(0, MAX_CITES);
+  citeArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -1144,8 +1411,10 @@ function extractPageHeadings() {
   });
   
   // Extract <abbr> tags (title attribute)
+  const MAX_ABBR = 30;
   const abbrElements = document.querySelectorAll('abbr');
-  abbrElements.forEach((element, index) => {
+  const abbrArray = Array.from(abbrElements).slice(0, MAX_ABBR);
+  abbrArray.forEach((element, index) => {
     const title = element.getAttribute('title');
     const text = truncate(title || element.textContent);
     if (text && text.length > 0) {
@@ -1159,8 +1428,10 @@ function extractPageHeadings() {
   });
   
   // Extract <time> tags (datetime attribute)
+  const MAX_TIME = 30;
   const timeElements = document.querySelectorAll('time');
-  timeElements.forEach((element, index) => {
+  const timeArray = Array.from(timeElements).slice(0, MAX_TIME);
+  timeArray.forEach((element, index) => {
     const datetime = element.getAttribute('datetime');
     const text = truncate(datetime || element.textContent);
     if (text && text.length > 0) {
@@ -1174,8 +1445,10 @@ function extractPageHeadings() {
   });
   
   // Extract <mark> tags
+  const MAX_MARKS = 50;
   const markElements = document.querySelectorAll('mark');
-  markElements.forEach((element, index) => {
+  const markArray = Array.from(markElements).slice(0, MAX_MARKS);
+  markArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -1188,8 +1461,10 @@ function extractPageHeadings() {
   });
   
   // Extract <button> tags
+  const MAX_BUTTONS = 50;
   const buttonElements = document.querySelectorAll('button');
-  buttonElements.forEach((element, index) => {
+  const buttonArray = Array.from(buttonElements).slice(0, MAX_BUTTONS);
+  buttonArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     const value = element.value;
     if (text || value) {
@@ -1203,8 +1478,10 @@ function extractPageHeadings() {
   });
   
   // Extract <textarea> tags
+  const MAX_TEXTAREAS = 30;
   const textareaElements = document.querySelectorAll('textarea');
-  textareaElements.forEach((element, index) => {
+  const textareaArray = Array.from(textareaElements).slice(0, MAX_TEXTAREAS);
+  textareaArray.forEach((element, index) => {
     const placeholder = element.getAttribute('placeholder');
     const name = element.name || element.id || 'Textarea';
     if (placeholder) {
@@ -1225,8 +1502,10 @@ function extractPageHeadings() {
   });
   
   // Extract <select> tags
+  const MAX_SELECTS = 30;
   const selectElements = document.querySelectorAll('select');
-  selectElements.forEach((element, index) => {
+  const selectArray = Array.from(selectElements).slice(0, MAX_SELECTS);
+  selectArray.forEach((element, index) => {
     const name = element.name || element.id || 'Select';
     const options = [];
     element.querySelectorAll('option').forEach(opt => {
@@ -1244,8 +1523,10 @@ function extractPageHeadings() {
   });
   
   // Extract <label> tags
+  const MAX_LABELS = 50;
   const labelElements = document.querySelectorAll('label');
-  labelElements.forEach((element, index) => {
+  const labelArray = Array.from(labelElements).slice(0, MAX_LABELS);
+  labelArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 0) {
       headings.push({
@@ -1258,8 +1539,10 @@ function extractPageHeadings() {
   });
   
   // Extract <figure> tags with figcaption
+  const MAX_FIGURES = 30;
   const figureElements = document.querySelectorAll('figure');
-  figureElements.forEach((element, index) => {
+  const figureArray = Array.from(figureElements).slice(0, MAX_FIGURES);
+  figureArray.forEach((element, index) => {
     const figcaption = element.querySelector('figcaption');
     const figcaptionText = figcaption ? truncate(figcaption.textContent) : '';
     
@@ -1280,8 +1563,10 @@ function extractPageHeadings() {
   });
   
   // Extract <details> tags
+  const MAX_DETAILS = 30;
   const detailsElements = document.querySelectorAll('details');
-  detailsElements.forEach((element, index) => {
+  const detailsArray = Array.from(detailsElements).slice(0, MAX_DETAILS);
+  detailsArray.forEach((element, index) => {
     const summary = element.querySelector('summary');
     const summaryText = summary ? truncate(summary.textContent) : '';
     const text = truncate(element.textContent);
@@ -1297,8 +1582,10 @@ function extractPageHeadings() {
   });
   
   // Extract <summary> tags
+  const MAX_SUMMARIES = 30;
   const summaryElements = document.querySelectorAll('summary');
-  summaryElements.forEach((element, index) => {
+  const summaryArray = Array.from(summaryElements).slice(0, MAX_SUMMARIES);
+  summaryArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 0) {
       headings.push({

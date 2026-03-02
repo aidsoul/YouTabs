@@ -16,6 +16,25 @@ function extractHeadings(settings) {
     }
     return trimmed;
   };
+
+  // Get direct text nodes only (no nested element text) - for container elements
+  // This prevents duplicate indexing when container has child elements with text
+  // Falls back to all text if no direct text nodes found
+  const getDirectText = (element) => {
+    let text = '';
+    let hasTextNodes = false;
+    for (const node of element.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        hasTextNodes = true;
+        text += node.textContent;
+      }
+    }
+    // Fallback only if no text nodes were found at all
+    if (!hasTextNodes && element.textContent) {
+      return truncate(element.textContent);
+    }
+    return truncate(text);
+  };
   
   // Extract h1-h6 headings
   const headingElements = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
@@ -88,9 +107,11 @@ function extractHeadings(settings) {
   });
   
   // Extract <div> tags with text content
+  const MAX_DIVS = 50;
   const divElements = document.querySelectorAll('div');
-  divElements.forEach((element, index) => {
-    const text = truncate(element.textContent);
+  const divArray = Array.from(divElements).slice(0, MAX_DIVS);
+  divArray.forEach((element, index) => {
+    const text = getDirectText(element);
     // Only index divs with meaningful text (more than just whitespace)
     if (text && text.length > 2) {
       headings.push({
@@ -103,8 +124,10 @@ function extractHeadings(settings) {
   });
   
   // Extract <ul> and <ol> tags (lists)
+  const MAX_LISTS = 50;
   const listElements = document.querySelectorAll('ul, ol');
-  listElements.forEach((element, index) => {
+  const listArray = Array.from(listElements).slice(0, MAX_LISTS);
+  listArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     const listType = element.tagName.toLowerCase();
     // Only index lists with meaningful text
@@ -120,8 +143,10 @@ function extractHeadings(settings) {
   });
   
   // Extract <li> tags
+  const MAX_LIS = 100;
   const liElements = document.querySelectorAll('li');
-  liElements.forEach((element, index) => {
+  const liArray = Array.from(liElements).slice(0, MAX_LIS);
+  liArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 0) {
       headings.push({
@@ -134,8 +159,10 @@ function extractHeadings(settings) {
   });
   
   // Extract <input type="file"> tags
+  const MAX_FILE_INPUTS = 20;
   const fileInputElements = document.querySelectorAll('input[type="file"]');
-  fileInputElements.forEach((element, index) => {
+  const fileInputArray = Array.from(fileInputElements).slice(0, MAX_FILE_INPUTS);
+  fileInputArray.forEach((element, index) => {
     const text = element.name || element.id || 'File input';
     const accept = element.accept || '';
     headings.push({
@@ -148,8 +175,10 @@ function extractHeadings(settings) {
   });
   
   // Extract <a download> tags (download links)
+  const MAX_DOWNLOAD_LINKS = 20;
   const downloadLinkElements = document.querySelectorAll('a[download]');
-  downloadLinkElements.forEach((element, index) => {
+  const downloadLinkArray = Array.from(downloadLinkElements).slice(0, MAX_DOWNLOAD_LINKS);
+  downloadLinkArray.forEach((element, index) => {
     const text = truncate(element.textContent) || element.download;
     const href = element.href;
     if (text || href) {
@@ -164,8 +193,10 @@ function extractHeadings(settings) {
   });
   
   // Extract <video> tags
+  const MAX_VIDEOS = 20;
   const videoElements = document.querySelectorAll('video');
-  videoElements.forEach((element, index) => {
+  const videoArray = Array.from(videoElements).slice(0, MAX_VIDEOS);
+  videoArray.forEach((element, index) => {
     const src = element.src || (element.querySelector('source')?.src || '');
     let text = element.title || element.alt || '';
     // If text is empty, extract filename from URL
@@ -182,8 +213,10 @@ function extractHeadings(settings) {
   });
   
   // Extract <audio> tags
+  const MAX_AUDIOS = 20;
   const audioElements = document.querySelectorAll('audio');
-  audioElements.forEach((element, index) => {
+  const audioArray = Array.from(audioElements).slice(0, MAX_AUDIOS);
+  audioArray.forEach((element, index) => {
     const src = element.src || (element.querySelector('source')?.src || '');
     let text = element.title || element.alt || '';
     // If text is empty, extract filename from URL
@@ -200,8 +233,10 @@ function extractHeadings(settings) {
   });
   
   // Extract <iframe> with video sources (YouTube, Vimeo, etc.)
+  const MAX_IFRAMES = 20;
   const iframeElements = document.querySelectorAll('iframe[src*="youtube"], iframe[src*="vimeo"], iframe[src*="dailymotion"], iframe[src*="video"]');
-  iframeElements.forEach((element, index) => {
+  const iframeArray = Array.from(iframeElements).slice(0, MAX_IFRAMES);
+  iframeArray.forEach((element, index) => {
     const src = element.src;
     let text = element.title || '';
     // If text is empty, try to extract video ID or filename from URL
@@ -236,8 +271,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <table> tags with headers and captions
+  const MAX_TABLES = 30;
   const tableElements = document.querySelectorAll('table');
-  tableElements.forEach((element, index) => {
+  const tableArray = Array.from(tableElements).slice(0, MAX_TABLES);
+  tableArray.forEach((element, index) => {
     const caption = element.querySelector('caption');
     const captionText = caption ? truncate(caption.textContent) : '';
     const headers = [];
@@ -275,7 +312,7 @@ function extractHeadings(settings) {
   const sectionElements = document.querySelectorAll('section');
   const sectionArray = Array.from(sectionElements).slice(0, MAX_SECTIONS);
   sectionArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'section-' + index,
@@ -291,7 +328,7 @@ function extractHeadings(settings) {
   const articleElements = document.querySelectorAll('article');
   const articleArray = Array.from(articleElements).slice(0, MAX_ARTICLES);
   articleArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'article-' + index,
@@ -307,7 +344,7 @@ function extractHeadings(settings) {
   const asideElements = document.querySelectorAll('aside');
   const asideArray = Array.from(asideElements).slice(0, MAX_ASIDES);
   asideArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'aside-' + index,
@@ -323,7 +360,7 @@ function extractHeadings(settings) {
   const navElements = document.querySelectorAll('nav');
   const navArray = Array.from(navElements).slice(0, MAX_NAVS);
   navArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'nav-' + index,
@@ -339,7 +376,7 @@ function extractHeadings(settings) {
   const footerElements = document.querySelectorAll('footer');
   const footerArray = Array.from(footerElements).slice(0, MAX_FOOTERS);
   footerArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'footer-' + index,
@@ -355,7 +392,7 @@ function extractHeadings(settings) {
   const headerHtmlElements = document.querySelectorAll('header');
   const headerArray = Array.from(headerHtmlElements).slice(0, MAX_HEADERS_HTML);
   headerArray.forEach((element, index) => {
-    const text = truncate(element.textContent);
+    const text = getDirectText(element);
     if (text && text.length > 2) {
       headings.push({
         id: 'header-' + index,
@@ -367,8 +404,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <blockquote> tags
+  const MAX_BLOCKQUOTES = 50;
   const blockquoteElements = document.querySelectorAll('blockquote');
-  blockquoteElements.forEach((element, index) => {
+  const blockquoteArray = Array.from(blockquoteElements).slice(0, MAX_BLOCKQUOTES);
+  blockquoteArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -381,8 +420,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <code> tags
+  const MAX_CODE = 200;
   const codeElements = document.querySelectorAll('code');
-  codeElements.forEach((element, index) => {
+  const codeArray = Array.from(codeElements).slice(0, MAX_CODE);
+  codeArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -395,8 +436,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <pre> tags
+  const MAX_PRE = 100;
   const preElements = document.querySelectorAll('pre');
-  preElements.forEach((element, index) => {
+  const preArray = Array.from(preElements).slice(0, MAX_PRE);
+  preArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -409,8 +452,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <cite> tags
+  const MAX_CITES = 30;
   const citeElements = document.querySelectorAll('cite');
-  citeElements.forEach((element, index) => {
+  const citeArray = Array.from(citeElements).slice(0, MAX_CITES);
+  citeArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -423,8 +468,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <abbr> tags (title attribute)
+  const MAX_ABBR = 30;
   const abbrElements = document.querySelectorAll('abbr');
-  abbrElements.forEach((element, index) => {
+  const abbrArray = Array.from(abbrElements).slice(0, MAX_ABBR);
+  abbrArray.forEach((element, index) => {
     const title = element.getAttribute('title');
     const text = truncate(title || element.textContent);
     if (text && text.length > 0) {
@@ -438,8 +485,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <time> tags (datetime attribute)
+  const MAX_TIME = 30;
   const timeElements = document.querySelectorAll('time');
-  timeElements.forEach((element, index) => {
+  const timeArray = Array.from(timeElements).slice(0, MAX_TIME);
+  timeArray.forEach((element, index) => {
     const datetime = element.getAttribute('datetime');
     const text = truncate(datetime || element.textContent);
     if (text && text.length > 0) {
@@ -453,8 +502,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <mark> tags
+  const MAX_MARKS = 50;
   const markElements = document.querySelectorAll('mark');
-  markElements.forEach((element, index) => {
+  const markArray = Array.from(markElements).slice(0, MAX_MARKS);
+  markArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 2) {
       headings.push({
@@ -467,8 +518,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <button> tags
+  const MAX_BUTTONS = 50;
   const buttonElements = document.querySelectorAll('button');
-  buttonElements.forEach((element, index) => {
+  const buttonArray = Array.from(buttonElements).slice(0, MAX_BUTTONS);
+  buttonArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     const value = element.value;
     if (text || value) {
@@ -482,8 +535,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <textarea> tags
+  const MAX_TEXTAREAS = 30;
   const textareaElements = document.querySelectorAll('textarea');
-  textareaElements.forEach((element, index) => {
+  const textareaArray = Array.from(textareaElements).slice(0, MAX_TEXTAREAS);
+  textareaArray.forEach((element, index) => {
     const placeholder = element.getAttribute('placeholder');
     const name = element.name || element.id || 'Textarea';
     headings.push({
@@ -495,8 +550,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <select> tags
+  const MAX_SELECTS = 30;
   const selectElements = document.querySelectorAll('select');
-  selectElements.forEach((element, index) => {
+  const selectArray = Array.from(selectElements).slice(0, MAX_SELECTS);
+  selectArray.forEach((element, index) => {
     const name = element.name || element.id || 'Select';
     const options = [];
     element.querySelectorAll('option').forEach(opt => {
@@ -512,8 +569,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <label> tags
+  const MAX_LABELS = 50;
   const labelElements = document.querySelectorAll('label');
-  labelElements.forEach((element, index) => {
+  const labelArray = Array.from(labelElements).slice(0, MAX_LABELS);
+  labelArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 0) {
       headings.push({
@@ -526,8 +585,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <figure> tags with figcaption
+  const MAX_FIGURES = 30;
   const figureElements = document.querySelectorAll('figure');
-  figureElements.forEach((element, index) => {
+  const figureArray = Array.from(figureElements).slice(0, MAX_FIGURES);
+  figureArray.forEach((element, index) => {
     const figcaption = element.querySelector('figcaption');
     const figcaptionText = figcaption ? truncate(figcaption.textContent) : '';
     const img = element.querySelector('img');
@@ -545,8 +606,10 @@ function extractHeadings(settings) {
   });
 
   // Extract <details> tags
+  const MAX_DETAILS = 30;
   const detailsElements = document.querySelectorAll('details');
-  detailsElements.forEach((element, index) => {
+  const detailsArray = Array.from(detailsElements).slice(0, MAX_DETAILS);
+  detailsArray.forEach((element, index) => {
     const summary = element.querySelector('summary');
     const summaryText = summary ? truncate(summary.textContent) : '';
     const text = truncate(element.textContent);
@@ -561,14 +624,68 @@ function extractHeadings(settings) {
   });
 
   // Extract <summary> tags
+  const MAX_SUMMARIES = 30;
   const summaryElements = document.querySelectorAll('summary');
-  summaryElements.forEach((element, index) => {
+  const summaryArray = Array.from(summaryElements).slice(0, MAX_SUMMARIES);
+  summaryArray.forEach((element, index) => {
     const text = truncate(element.textContent);
     if (text && text.length > 0) {
       headings.push({
         id: 'summary-' + index,
         text: text,
         type: 'summary',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract ARIA labels and descriptions (for SPA frameworks like React, Vue)
+  // This captures accessibility attributes that serve as semantic labels
+  const MAX_ARIA_ELEMENTS = 200;
+  const ariaElements = document.querySelectorAll('[aria-label], [aria-description]');
+  const ariaArray = Array.from(ariaElements).slice(0, MAX_ARIA_ELEMENTS);
+  ariaArray.forEach((element, index) => {
+    const label = element.getAttribute('aria-label') || element.getAttribute('aria-description');
+    if (label && label.length > 2) {
+      headings.push({
+        id: 'aria-' + index,
+        text: truncate(label),
+        type: 'aria',
+        url: window.location.href
+      });
+    }
+  });
+
+  // Extract data-* attributes (commonly used by frameworks like Bootstrap, jQuery UI, etc.)
+  // These store useful text in data-title, data-tooltip, data-content, data-label, etc.
+  const dataAttributes = ['data-title', 'data-tooltip', 'data-content', 'data-label', 'data-text', 'data-name', 'data-value', 'data-description', 'data-placeholder'];
+  const MAX_DATA_ELEMENTS = 200;
+  
+  // Build selector for all data attributes
+  const dataSelector = dataAttributes.map(attr => '[' + attr + ']').join(', ');
+  const dataElements = document.querySelectorAll(dataSelector);
+  const dataArray = Array.from(dataElements).slice(0, MAX_DATA_ELEMENTS);
+  
+  dataArray.forEach((element, index) => {
+    // Check each data attribute and extract the first non-empty value
+    let dataText = '';
+    let dataAttr = '';
+    
+    for (const attr of dataAttributes) {
+      const value = element.getAttribute(attr);
+      if (value && value.trim().length > 0) {
+        dataText = value.trim();
+        dataAttr = attr.replace('data-', '');
+        break;
+      }
+    }
+    
+    if (dataText && dataText.length > 0) {
+      headings.push({
+        id: 'data-' + index,
+        text: truncate(dataText),
+        type: 'data',
+        dataAttr: dataAttr,
         url: window.location.href
       });
     }
@@ -675,7 +792,10 @@ class YouTabsCore {
     { value: 'label', label: 'Labels' },
     { value: 'figure', label: 'Figures' },
     { value: 'details', label: 'Details' },
-    { value: 'summary', label: 'Summary' }
+    { value: 'summary', label: 'Summary' },
+    { value: 'meta', label: 'Meta Tags' },
+    { value: 'aria', label: 'ARIA Labels' },
+    { value: 'data', label: 'Data Attributes' }
   ];
   
   static getFilterTypeHTML(checked = true) {
@@ -686,6 +806,117 @@ class YouTabsCore {
       </label>
     `).join('');
   }
+
+  // Static fuzzy search helpers
+  static levenshteinDistance(str1, str2, maxDist = Infinity) {
+    const m = str1.length;
+    const n = str2.length;
+    
+    // Early termination: if length difference is too large, no need to compute
+    // This is an optimization for fuzzy matching
+    if (Math.abs(m - n) > maxDist) {
+      return maxDist + 1; // Return value greater than maxDist to trigger early rejection
+    }
+    
+    // Create matrix
+    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+    
+    // Initialize first column
+    for (let i = 0; i <= m; i++) {
+      dp[i][0] = i;
+    }
+    
+    // Initialize first row
+    for (let j = 0; j <= n; j++) {
+      dp[0][j] = j;
+    }
+    
+    // Fill the matrix
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (str1[i - 1] === str2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = 1 + Math.min(
+            dp[i - 1][j],     // deletion
+            dp[i][j - 1],     // insertion
+            dp[i - 1][j - 1]  // substitution
+          );
+        }
+      }
+    }
+    
+    return dp[m][n];
+  }
+
+  static fuzzyMatch(query, text, maxDistance = 2) {
+    const lowerQuery = query.toLowerCase();
+    const lowerText = text.toLowerCase();
+    
+    // Exact match
+    if (lowerText.includes(lowerQuery)) {
+      return { match: true, distance: 0, score: 1 };
+    }
+    
+    // Word-based matching - check if query words are in text
+    const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+    const textWords = lowerText.split(/\s+/).filter(w => w.length > 0);
+    
+    if (queryWords.length > 0 && textWords.length > 0) {
+      let allWordsFound = true;
+      let totalWordDistance = 0;
+      
+      for (const qWord of queryWords) {
+        let minDist = Infinity;
+        
+        for (const tWord of textWords) {
+          // Exact word match - no need to compute distance
+          if (tWord === qWord) {
+            minDist = 0;
+            break;
+          }
+          // Skip Levenshtein if length difference is too large
+          if (Math.abs(tWord.length - qWord.length) <= maxDistance) {
+            const dist = YouTabsCore.levenshteinDistance(qWord, tWord, maxDistance);
+            if (dist < minDist) {
+              minDist = dist;
+            }
+            // Early termination if exact match found
+            if (minDist === 0) break;
+          }
+        }
+        
+        if (minDist <= maxDistance) {
+          totalWordDistance += minDist;
+        } else {
+          allWordsFound = false;
+          break; // Early termination - word not found within threshold
+        }
+      }
+      
+      if (allWordsFound) {
+        const avgDistance = totalWordDistance / queryWords.length;
+        const score = Math.max(0, 1 - avgDistance / (maxDistance + 1));
+        return { match: true, distance: avgDistance, score };
+      }
+    }
+    
+    // Check if entire query is close to text using Levenshtein
+    // Only compute if length difference is reasonable (within 50%)
+    if (lowerText.length > 0 && lowerQuery.length > 0 && 
+        Math.abs(lowerText.length - lowerQuery.length) <= Math.max(lowerQuery.length * 0.5, maxDistance)) {
+      const dist = YouTabsCore.levenshteinDistance(lowerQuery, lowerText, maxDistance);
+      const maxAllowed = Math.max(maxDistance, Math.floor(lowerQuery.length * 0.4));
+      
+      if (dist <= maxAllowed) {
+        const score = Math.max(0, 1 - dist / (maxAllowed + 1));
+        return { match: true, distance: dist, score };
+      }
+    }
+    
+    return { match: false, distance: Infinity, score: 0 };
+  }
+  
   constructor(options = {}) {
     // Configuration options - store in settings for consistency
     this.shouldCloseWindow = options.shouldCloseWindow ?? false;
@@ -702,7 +933,7 @@ class YouTabsCore {
     
     // Search filter state
     this.filterTabs = true;
-    this.filterHeadingTypes = ['heading', 'paragraph', 'link', 'image', 'div', 'ul', 'ol', 'li', 'input', 'video', 'audio', 'iframe', 'span', 'table', 'section', 'article', 'aside', 'nav', 'footer', 'header', 'blockquote', 'code', 'pre', 'cite', 'abbr', 'time', 'mark', 'button', 'textarea', 'select', 'label', 'figure', 'details', 'summary'];
+    this.filterHeadingTypes = ['heading', 'paragraph', 'link', 'image', 'div', 'ul', 'ol', 'li', 'input', 'video', 'audio', 'iframe', 'span', 'table', 'section', 'article', 'aside', 'nav', 'footer', 'header', 'blockquote', 'code', 'pre', 'cite', 'abbr', 'time', 'mark', 'button', 'textarea', 'select', 'label', 'figure', 'details', 'summary', 'meta', 'aria', 'data'];
     this.totalFilterTypes = this.filterHeadingTypes.length;
     this.hasActiveFilter = false;
     
@@ -4740,6 +4971,7 @@ class YouTabsCore {
   
   // Check if a page should be re-indexed by URL
   // Returns true if: page URL is not indexed OR 30 minutes have passed since last index
+  // Returns false if page was recently updated via incremental indexing
   async shouldReindexPageByUrl(url) {
     try {
       const urlKey = this.getUrlKey(url);
@@ -4761,11 +4993,25 @@ class YouTabsCore {
         console.log('shouldReindexPageByUrl: not indexed, should index');
         return true;
       }
+
+      // Check if page was recently updated via incremental indexing
+      // If updated in the last 5 minutes, skip re-indexing as changes are already captured
+      const now = Date.now();
+      const FIVE_MINUTES_MS = 5 * 60 * 1000;
+      const timeSinceIndex = now - pageIndexWithTimestamp.indexedAt;
+      
+      // If incremental update happened recently (within 5 minutes), don't re-index
+      // This allows MutationObserver to handle SPA updates without full re-indexing
+      if (pageIndexWithTimestamp.lastIncrementalUpdate) {
+        const timeSinceIncremental = now - pageIndexWithTimestamp.lastIncrementalUpdate;
+        if (timeSinceIncremental < FIVE_MINUTES_MS) {
+          console.log('shouldReindexPageByUrl: incremental update recently, skip. Time:', Math.round(timeSinceIncremental / 60000), 'minutes');
+          return false;
+        }
+      }
       
       // Check if 30 minutes have passed since last index
-      const now = Date.now();
       const THIRTY_MINUTES_MS = 30 * 60 * 1000;
-      const timeSinceIndex = now - pageIndexWithTimestamp.indexedAt;
       
       if (timeSinceIndex >= THIRTY_MINUTES_MS) {
         console.log('shouldReindexPageByUrl: expired, should re-index. Time:', Math.round(timeSinceIndex / 60000), 'minutes');
@@ -4840,7 +5086,11 @@ class YouTabsCore {
           continue;
         }
         
-        if (heading.text.toLowerCase().includes(lowerQuery)) {
+        // Use fuzzy matching for search
+        const lowerText = heading.text.toLowerCase();
+        const fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerText, 2);
+        
+        if (fuzzyResult.match) {
           // Try to find an open tab with matching URL
           const pageUrl = heading.url;
           const matchingTab = openTabs.find(t => {
@@ -4856,19 +5106,20 @@ class YouTabsCore {
           const isTabOpen = !!matchingTab;
           const tabId = matchingTab ? matchingTab.id : null;
           
-          // Calculate relevance score
+          // Calculate relevance score using fuzzy match results
           let relevance = 0;
-          const lowerText = heading.text.toLowerCase();
           
-          // Exact match gets highest score
-          if (lowerText === lowerQuery) {
+          // Use fuzzy score (0-1) as base relevance
+          // Exact match has distance 0, score 1; fuzzy matches have lower scores
+          if (fuzzyResult.distance === 0) {
+            // Exact match (score = 1)
             relevance = 100;
-          } else if (lowerText.startsWith(lowerQuery)) {
-            relevance = 80;
-          } else if (lowerText.includes(lowerQuery)) {
-            // Check position - earlier in text = higher relevance
-            const position = lowerText.indexOf(lowerQuery);
-            relevance = 70 - position;
+          } else if (fuzzyResult.distance <= 1) {
+            // Near match (very small edit distance)
+            relevance = 80 + (1 - fuzzyResult.distance) * 10;
+          } else {
+            // Fuzzy match - scale fuzzy score (0-1) to relevance (30-70 range)
+            relevance = 30 + fuzzyResult.score * 40;
           }
           
           // Give higher priority to headings (h1-h6) and paragraphs
@@ -4889,7 +5140,8 @@ class YouTabsCore {
             isTabOpen: isTabOpen,
             pageUrl: pageUrl,
             heading: heading,
-            relevance: relevance
+            relevance: relevance,
+            fuzzyScore: fuzzyResult.score
           });
         }
       }
