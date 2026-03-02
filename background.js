@@ -416,4 +416,119 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // Keep message channel open for async response
   }
+
+  // Handle incremental index updates from content script (MutationObserver)
+  if (message.action === 'incrementalIndexUpdate' && message.url && message.changes) {
+    handleIncrementalIndexUpdate(message.url, message.changes).then(result => {
+      sendResponse(result);
+    }).catch(error => {
+      console.error('Incremental index update error:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // Keep message channel open for async response
+  }
 });
+
+// Handle incremental index updates from content script
+async function handleIncrementalIndexUpdate(url, changes) {
+  try {
+    // Normalize URL for consistent matching
+    const urlKey = getUrlKey(url);
+    
+    // Get the tab that sent the update - try both full URL and normalized URL
+    // This handles pages with query strings where full URL may not match exactly
+    let tabs = await browser.tabs.query({ url: url });
+    if (!tabs || tabs.length === 0) {
+      // Try with normalized URL (origin + pathname without trailing slash)
+      const normalizedUrl = urlKey;
+      tabs = await browser.tabs.query({ url: normalizedUrl });
+    }
+    if (!tabs || tabs.length === 0) {
+      console.log('handleIncrementalIndexUpdate: No tab found for URL:', url, 'normalized:', urlKey);
+      return { success: false, error: 'No tab found' };
+    }
+    const tabId = tabs[0].id;
+
+    // Get current page headings from IndexedDB
+    const pageIndexData = await window.YouTabsDB.getPagesIndexByUrl(urlKey);
+    let pageHeadings = pageIndexData?.headings;
+
+    // Validate pageHeadings is an array
+    if (!Array.isArray(pageHeadings)) {
+      pageHeadings = [];
+    }
+
+    // Create a map for quick lookup
+    const headingsMap = new Map();
+    pageHeadings.forEach(h => {
+      const key = h.type + '-' + h.id;
+      headingsMap.set(key, h);
+    });
+
+    // Apply changes
+    let addedCount = 0;
+    let modifiedCount = 0;
+    let removedCount = 0;
+
+    // Add new headings
+    for (const heading of changes.added) {
+      const key = heading.type + '-' + heading.id;
+      if (!headingsMap.has(key)) {
+        headingsMap.set(key, heading);
+        addedCount++;
+      }
+    }
+
+    // Modify existing headings
+    for (const heading of changes.modified) {
+      const key = heading.type + '-' + heading.id;
+      if (headingsMap.has(key)) {
+        headingsMap.set(key, heading);
+        modifiedCount++;
+      }
+    }
+
+    // Remove deleted headings
+    for (const heading of changes.removed) {
+      const key = heading.type + '-' + heading.id;
+      if (headingsMap.has(key)) {
+        headingsMap.delete(key);
+        removedCount++;
+      }
+    }
+
+    // Convert map back to array
+    const updatedHeadings = Array.from(headingsMap.values());
+
+    // Save updated headings to IndexedDB
+    await window.YouTabsDB.savePageHeadingsByUrl(url, tabId, updatedHeadings, true);
+
+    // Update in-memory cache if available
+    if (window.YouTabsCore && window.YouTabsCore.pageHeadings) {
+      window.YouTabsCore.pageHeadings[urlKey] = updatedHeadings;
+    }
+
+    console.log('Incremental index updated:', addedCount, 'added,', modifiedCount, 'modified,', removedCount, 'removed');
+    return { 
+      success: true, 
+      added: addedCount, 
+      modified: modifiedCount, 
+      removed: removedCount,
+      total: updatedHeadings.length
+    };
+  } catch (error) {
+    console.error('handleIncrementalIndexUpdate error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Get URL key for indexing (normalizes URL)
+function getUrlKey(url) {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+  } catch (e) {
+    console.log('getUrlKey: failed to parse URL:', url, e);
+    return url;
+  }
+}
