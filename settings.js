@@ -19,7 +19,9 @@ const defaultSettings = {
   // Grouping settings
   enableGrouping: true,
   groupingType: 'custom', // 'domain', 'color', 'time', 'custom'
-  collapsedGroups: [] // Array of collapsed group keys
+  collapsedGroups: [], // Array of collapsed group keys
+  // Action buttons panel
+  enableActionButtonsLeft: false // Show action buttons on left side
 };
 
 // Load settings

@@ -178,6 +178,10 @@ body.full-height {
 
 /* Index all button - positioned to the right */
 .action-buttons-left {
+  display: none;
+}
+
+.action-buttons-left.visible {
   display: flex;
   align-items: center;
   gap: 4px;
