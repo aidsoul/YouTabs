@@ -402,7 +402,15 @@ function highlightSearchText(query) {
       regex.lastIndex = 0; // Reset regex state
       
       const span = document.createElement('span');
-      span.innerHTML = text.replace(regex, '<mark class="yt-highlight-mark">$1</mark>');
+      // Use DOMParser to safely parse HTML
+      const originalText = text.replace(regex, '<mark class="yt-highlight-mark">$1</mark>');
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(originalText, 'text/html');
+      const tempDiv = doc.body;
+      // Transfer all child nodes to our span
+      while (tempDiv.firstChild) {
+        span.appendChild(tempDiv.firstChild);
+      }
       
       // Replace the text node with the highlighted span
       if (textNode.parentNode) {
