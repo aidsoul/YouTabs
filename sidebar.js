@@ -33,7 +33,21 @@ class YouTabsSidebar extends YouTabsCore {
     
     // Generate filter dropdown items dynamically if needed
     if (this.filterHeadingsMenu && this.filterHeadingsMenu.dataset.generated === 'true' && typeof YouTabsCore !== 'undefined') {
-      this.filterHeadingsMenu.innerHTML = YouTabsCore.getFilterTypeHTML(true);
+      // Clear existing content
+      this.filterHeadingsMenu.innerHTML = '';
+      
+      // Get the HTML string from core
+      const filterHTML = YouTabsCore.getFilterTypeHTML(true);
+      
+      // Use DOMParser to safely parse HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(filterHTML, 'text/html');
+      const tempDiv = doc.body;
+      
+      // Append child nodes to target element
+      while (tempDiv.firstChild) {
+        this.filterHeadingsMenu.appendChild(tempDiv.firstChild);
+      }
     }
     
     this.init();

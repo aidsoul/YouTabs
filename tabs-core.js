@@ -502,8 +502,10 @@ class YouTabsCore {
     `;
     
     const container = document.createElement('div');
-    container.innerHTML = modalHTML;
-    this.modal = container.firstElementChild;
+    // Use DOMParser to safely parse HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(modalHTML, 'text/html');
+    this.modal = doc.body.firstElementChild;
     document.body.appendChild(this.modal);
     
     // Bind modal events
@@ -788,7 +790,20 @@ class YouTabsCore {
     if (hasCustomName) {
       const realNameItem = document.createElement('div');
       realNameItem.className = 'context-menu-item context-menu-info';
-      realNameItem.innerHTML = `<span class="context-menu-label">Real name:</span><span class="context-menu-value">${this.escapeHtml(realName)}</span>`;
+      // Create elements safely instead of using innerHTML
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'context-menu-label';
+      labelSpan.textContent = 'Real name:';
+      
+      const valueSpan = document.createElement('span');
+      valueSpan.className = 'context-menu-value';
+      valueSpan.textContent = realName;
+      
+      const container = document.createElement('span');
+      container.appendChild(labelSpan);
+      container.appendChild(valueSpan);
+      
+      realNameItem.appendChild(container);
       realNameItem.style.pointerEvents = 'none';
       menu.appendChild(realNameItem);
       
@@ -831,35 +846,49 @@ class YouTabsCore {
     menu.appendChild(divider);
     
     // Add to group submenu
-    const addToGroupItem = document.createElement('div');
-    addToGroupItem.className = 'context-menu-item has-submenu';
-    addToGroupItem.innerHTML = `
-      <span>Add to group</span>
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-        <path d="M4.5 2L8.5 6L4.5 10" stroke="currentColor" stroke-width="1.5" fill="none"/>
-      </svg>
-    `;
-    
-    // Create submenu for groups
-    const submenu = document.createElement('div');
-    submenu.className = 'context-submenu';
-    
-    // Add option to create new group
-    const newGroupItem = document.createElement('div');
-    newGroupItem.className = 'context-menu-item';
-    newGroupItem.textContent = 'Create group...';
-    newGroupItem.addEventListener('click', async () => {
-      const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-      if (groupName?.trim()) {
-        const newGroup = await this.createCustomGroup(groupName.trim());
-        await this.addTabToGroup(tabId, newGroup.id);
-      }
-      this.hideContextMenu();
-    });
-    submenu.appendChild(newGroupItem);
-    
-    // Add existing groups
     if (this.customGroups.length > 0) {
+      // Show "Add to group" with submenu when there are existing groups
+      const addToGroupItem = document.createElement('div');
+      addToGroupItem.className = 'context-menu-item has-submenu';
+      // Create elements safely instead of using innerHTML
+      const span = document.createElement('span');
+      span.textContent = 'Add to group';
+      
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '12');
+      svg.setAttribute('height', '12');
+      svg.setAttribute('viewBox', '0 0 12 12');
+      svg.setAttribute('fill', 'currentColor');
+      
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M4.5 2L8.5 6L4.5 10');
+      path.setAttribute('stroke', 'currentColor');
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('fill', 'none');
+      
+      svg.appendChild(path);
+      addToGroupItem.appendChild(span);
+      addToGroupItem.appendChild(svg);
+      
+      // Create submenu for groups
+      const submenu = document.createElement('div');
+      submenu.className = 'context-submenu';
+      
+      // Add option to create new group
+      const newGroupItem = document.createElement('div');
+      newGroupItem.className = 'context-menu-item';
+      newGroupItem.textContent = 'Create group...';
+      newGroupItem.addEventListener('click', async () => {
+        const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
+        if (groupName?.trim()) {
+          const newGroup = await this.createCustomGroup(groupName.trim());
+          await this.addTabToGroup(tabId, newGroup.id);
+        }
+        this.hideContextMenu();
+      });
+      submenu.appendChild(newGroupItem);
+      
+      // Add existing groups
       const divider = document.createElement('div');
       divider.className = 'context-menu-divider';
       submenu.appendChild(divider);
@@ -899,7 +928,10 @@ class YouTabsCore {
         
         const depth = this.getGroupDepth(group.id);
         const indent = depth > 0 ? '└'.repeat(depth) + ' ' : '';
-        groupItem.innerHTML = `<span>${indent}${this.escapeHtml(group.name)}</span>`;
+        // Create elements safely instead of using innerHTML
+        const span = document.createElement('span');
+        span.textContent = indent + group.name;
+        groupItem.appendChild(span);
         if (depth > 0) {
           groupItem.style.paddingLeft = (8 + depth * 12) + 'px';
         }
@@ -921,10 +953,25 @@ class YouTabsCore {
           item.style.display = groupName.includes(searchTerm) ? '' : 'none';
         });
       });
+      
+      // Append submenu and menu item when there are groups
+      addToGroupItem.appendChild(submenu);
+      menu.appendChild(addToGroupItem);
+    } else {
+      // No custom groups exist - show "Create group..." as a standalone item at this level
+      const createGroupItem = document.createElement('div');
+      createGroupItem.className = 'context-menu-item';
+      createGroupItem.textContent = 'Create group...';
+      createGroupItem.addEventListener('click', async () => {
+        const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
+        if (groupName?.trim()) {
+          const newGroup = await this.createCustomGroup(groupName.trim());
+          await this.addTabToGroup(tabId, newGroup.id);
+        }
+        this.hideContextMenu();
+      });
+      menu.appendChild(createGroupItem);
     }
-    
-    addToGroupItem.appendChild(submenu);
-    menu.appendChild(addToGroupItem);
     
     // If tab is already in a group, show remove option
     if (customGroup) {
@@ -951,12 +998,23 @@ class YouTabsCore {
       // Tab is unloaded - show "Load" option
       const loadItem = document.createElement('div');
       loadItem.className = 'context-menu-item';
-      loadItem.innerHTML = `
-        <span>Load tab</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-left: 8px;">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-      `;
+      // Create elements safely instead of using innerHTML
+      const span = document.createElement('span');
+      span.textContent = 'Load tab';
+      
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'currentColor');
+      svg.style.marginLeft = '8px';
+      
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M8 5v14l11-7z');
+      
+      svg.appendChild(path);
+      loadItem.appendChild(span);
+      loadItem.appendChild(svg);
       loadItem.addEventListener('click', async () => {
         try {
           // To reload a discarded tab, we reload it
@@ -1019,7 +1077,9 @@ class YouTabsCore {
       
       const indexedInfo = document.createElement('div');
       indexedInfo.className = 'context-menu-item context-menu-info';
-      indexedInfo.innerHTML = `<span>Indexed: ${headings.length} items</span>`;
+      const indexedSpan = document.createElement('span');
+      indexedSpan.textContent = `Indexed: ${headings.length} items`;
+      indexedInfo.appendChild(indexedSpan);
       indexedInfo.style.pointerEvents = 'none';
       menu.appendChild(indexedInfo);
       
@@ -2556,11 +2616,17 @@ class YouTabsCore {
         
         const subcategoryHeader = document.createElement('div');
         subcategoryHeader.className = 'heading-search-subcategory-header';
-        subcategoryHeader.innerHTML = `
+        
+        // Use DOMParser to safely parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`
           <span class="heading-search-subcategory-toggle">+</span>
           <span class="heading-search-subcategory-title">${typeLabels[type] || type}</span>
           <span class="heading-search-subcategory-count">${results.length}</span>
-        `;
+        `, 'text/html');
+        while (doc.body.firstChild) {
+          subcategoryHeader.appendChild(doc.body.firstChild);
+        }
         
         // Toggle collapse/expand on header click
         subcategoryHeader.addEventListener('click', () => {
@@ -2629,7 +2695,12 @@ class YouTabsCore {
             </div>
           `;
           
-          headingItem.innerHTML = itemContent;
+          // Use DOMParser to safely parse HTML
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(itemContent, 'text/html');
+          while (doc.body.firstChild) {
+            headingItem.appendChild(doc.body.firstChild);
+          }
           
           // Handle click on image/video/audio thumbnail - open media URL directly
           const thumbnail = headingItem.querySelector('.heading-search-item-thumbnail.clickable');
@@ -2742,7 +2813,9 @@ class YouTabsCore {
     // Show search results indicator
     const hasHeadingResults = this.headingSearchResults && this.headingSearchResults.length > 0;
     if (this.searchQuery && displayTabs.length === 0 && !hasHeadingResults) {
-      this.tabsList.innerHTML = `
+      // Use DOMParser to safely parse HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`
         <div class="tabs-empty">
           <svg class="tabs-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8"/>
@@ -2750,7 +2823,8 @@ class YouTabsCore {
           </svg>
           <span class="tabs-empty-text">No results found for "${this.escapeHtml(this.searchQuery)}"</span>
         </div>
-      `;
+      `, 'text/html');
+      this.tabsList.appendChild(doc.body);
       return;
     }
     
@@ -2902,7 +2976,9 @@ class YouTabsCore {
           `;
         }
         
-        groupHeader.innerHTML = `
+        // Use DOMParser to safely parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`
           <div class="tab-group-toggle">
             <span class="tab-group-toggle-icon">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2915,7 +2991,10 @@ class YouTabsCore {
           ${groupInfo.isCustom !== true ? '<span class="tab-group-auto">auto</span>' : ''}
           <span class="tab-group-count">${group.length + (groupInfo.nestedTabsCount || 0)}</span>
           ${headerActions}
-        `;
+        `, 'text/html');
+        while (doc.body.firstChild) {
+          groupHeader.appendChild(doc.body.firstChild);
+        }
         
         // Update toggle icon based on collapsed state
         const toggleIcon = groupHeader.querySelector('.tab-group-toggle-icon');
@@ -3677,7 +3756,9 @@ class YouTabsCore {
       </button>`;
     }
     
-    tabItem.innerHTML = `
+    // Use DOMParser to safely parse HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`
       ${treeTwistyHtml}
       <div class="tab-favicon-wrapper">
         ${faviconHtml}
@@ -3694,7 +3775,10 @@ class YouTabsCore {
           <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </button>
-    `;
+    `, 'text/html');
+    while (doc.body.firstChild) {
+      tabItem.appendChild(doc.body.firstChild);
+    }
     
     // Add click handler for discarded indicator
     const discardedBtn = tabItem.querySelector('.tab-discarded-btn');
@@ -3787,16 +3871,24 @@ class YouTabsCore {
     if (indexAllBtn) {
       indexAllBtn.addEventListener('click', async () => {
         const originalHtml = indexAllBtn.innerHTML;
-        // Show loading icon while indexing
-        indexAllBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning">
+        // Show loading icon while indexing - use DOMParser for safety
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning">
           <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-        </svg>`;
+        </svg>`, 'text/html');
+        indexAllBtn.innerHTML = '';
+        indexAllBtn.appendChild(doc.body.firstChild);
         indexAllBtn.disabled = true;
         
         await this.indexAllTabs();
         
-        // Restore original icon
-        indexAllBtn.innerHTML = originalHtml;
+        // Restore original content using DOMParser for safety
+        const restoreParser = new DOMParser();
+        const restoreDoc = restoreParser.parseFromString(originalHtml, 'text/html');
+        indexAllBtn.textContent = '';
+        while (restoreDoc.body.firstChild) {
+          indexAllBtn.appendChild(restoreDoc.body.firstChild);
+        }
         indexAllBtn.disabled = false;
       });
     }
