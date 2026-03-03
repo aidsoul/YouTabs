@@ -5,7 +5,40 @@
 
 // Extract headings (h1-h6) and other content from a page - used by executeScript
 function extractHeadings(settings) {
-  const MAX_LENGTH = settings?.maxIndexChars || 250;
+  settings = settings || {};
+  const MAX_LENGTH = settings.maxIndexChars || 250;
+  const MAX_DIVS = settings.maxDivs || 50;
+  const MAX_LISTS = settings.maxLists || 50;
+  const MAX_LIS = settings.maxLIs || 100;
+  const MAX_FILE_INPUTS = settings.maxFileInputs || 20;
+  const MAX_DOWNLOAD_LINKS = settings.maxDownloadLinks || 20;
+  const MAX_VIDEOS = settings.maxVideos || 20;
+  const MAX_AUDIOS = settings.maxAudios || 20;
+  const MAX_IFRAMES = settings.maxIframes || 20;
+  const MAX_SPANS = settings.maxSpans || 100;
+  const MAX_TABLES = settings.maxTables || 30;
+  const MAX_SECTIONS = settings.maxSections || 30;
+  const MAX_ARTICLES = settings.maxArticles || 20;
+  const MAX_ASIDES = settings.maxAsides || 15;
+  const MAX_NAVS = settings.maxNavs || 10;
+  const MAX_FOOTERS = settings.maxFooters || 10;
+  const MAX_HEADERS_HTML = settings.maxHeaders || 10;
+  const MAX_BLOCKQUOTES = settings.maxBlockquotes || 50;
+  const MAX_CODE = settings.maxCode || 200;
+  const MAX_PRE = settings.maxPre || 100;
+  const MAX_CITES = settings.maxCites || 30;
+  const MAX_ABBR = settings.maxAbbr || 30;
+  const MAX_TIME = settings.maxTime || 30;
+  const MAX_MARKS = settings.maxMarks || 50;
+  const MAX_BUTTONS = settings.maxButtons || 50;
+  const MAX_TEXTAREAS = settings.maxTextareas || 30;
+  const MAX_SELECTS = settings.maxSelects || 30;
+  const MAX_LABELS = settings.maxLabels || 50;
+  const MAX_FIGURES = settings.maxFigures || 30;
+  const MAX_DETAILS = settings.maxDetails || 30;
+  const MAX_SUMMARIES = settings.maxSummaries || 30;
+  const MAX_ARIA_ELEMENTS = settings.maxAriaElements || 200;
+  const MAX_DATA_ELEMENTS = settings.maxDataElements || 200;
   const headings = [];
   
   // Helper to truncate text
@@ -107,7 +140,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <div> tags with text content
-  const MAX_DIVS = 50;
   const divElements = document.querySelectorAll('div');
   const divArray = Array.from(divElements).slice(0, MAX_DIVS);
   divArray.forEach((element, index) => {
@@ -124,7 +156,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <ul> and <ol> tags (lists)
-  const MAX_LISTS = 50;
   const listElements = document.querySelectorAll('ul, ol');
   const listArray = Array.from(listElements).slice(0, MAX_LISTS);
   listArray.forEach((element, index) => {
@@ -143,7 +174,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <li> tags
-  const MAX_LIS = 100;
   const liElements = document.querySelectorAll('li');
   const liArray = Array.from(liElements).slice(0, MAX_LIS);
   liArray.forEach((element, index) => {
@@ -159,7 +189,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <input type="file"> tags
-  const MAX_FILE_INPUTS = 20;
   const fileInputElements = document.querySelectorAll('input[type="file"]');
   const fileInputArray = Array.from(fileInputElements).slice(0, MAX_FILE_INPUTS);
   fileInputArray.forEach((element, index) => {
@@ -175,7 +204,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <a download> tags (download links)
-  const MAX_DOWNLOAD_LINKS = 20;
   const downloadLinkElements = document.querySelectorAll('a[download]');
   const downloadLinkArray = Array.from(downloadLinkElements).slice(0, MAX_DOWNLOAD_LINKS);
   downloadLinkArray.forEach((element, index) => {
@@ -193,7 +221,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <video> tags
-  const MAX_VIDEOS = 20;
   const videoElements = document.querySelectorAll('video');
   const videoArray = Array.from(videoElements).slice(0, MAX_VIDEOS);
   videoArray.forEach((element, index) => {
@@ -213,7 +240,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <audio> tags
-  const MAX_AUDIOS = 20;
   const audioElements = document.querySelectorAll('audio');
   const audioArray = Array.from(audioElements).slice(0, MAX_AUDIOS);
   audioArray.forEach((element, index) => {
@@ -233,7 +259,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <iframe> with video sources (YouTube, Vimeo, etc.)
-  const MAX_IFRAMES = 20;
   const iframeElements = document.querySelectorAll('iframe[src*="youtube"], iframe[src*="vimeo"], iframe[src*="dailymotion"], iframe[src*="video"]');
   const iframeArray = Array.from(iframeElements).slice(0, MAX_IFRAMES);
   iframeArray.forEach((element, index) => {
@@ -255,7 +280,6 @@ function extractHeadings(settings) {
   });
   
   // Extract <span> tags with text content (limit to prevent performance issues)
-  const MAX_SPANS = 100;
   const spanElements = document.querySelectorAll('span');
   const spanArray = Array.from(spanElements).slice(0, MAX_SPANS);
   spanArray.forEach((element, index) => {
@@ -271,7 +295,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <table> tags with headers and captions
-  const MAX_TABLES = 30;
   const tableElements = document.querySelectorAll('table');
   const tableArray = Array.from(tableElements).slice(0, MAX_TABLES);
   tableArray.forEach((element, index) => {
@@ -308,7 +331,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <section> tags with text content
-  const MAX_SECTIONS = 30;
   const sectionElements = document.querySelectorAll('section');
   const sectionArray = Array.from(sectionElements).slice(0, MAX_SECTIONS);
   sectionArray.forEach((element, index) => {
@@ -324,7 +346,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <article> tags with text content
-  const MAX_ARTICLES = 20;
   const articleElements = document.querySelectorAll('article');
   const articleArray = Array.from(articleElements).slice(0, MAX_ARTICLES);
   articleArray.forEach((element, index) => {
@@ -340,7 +361,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <aside> tags with text content
-  const MAX_ASIDES = 15;
   const asideElements = document.querySelectorAll('aside');
   const asideArray = Array.from(asideElements).slice(0, MAX_ASIDES);
   asideArray.forEach((element, index) => {
@@ -356,7 +376,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <nav> tags with text content
-  const MAX_NAVS = 10;
   const navElements = document.querySelectorAll('nav');
   const navArray = Array.from(navElements).slice(0, MAX_NAVS);
   navArray.forEach((element, index) => {
@@ -372,7 +391,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <footer> tags with text content
-  const MAX_FOOTERS = 10;
   const footerElements = document.querySelectorAll('footer');
   const footerArray = Array.from(footerElements).slice(0, MAX_FOOTERS);
   footerArray.forEach((element, index) => {
@@ -388,7 +406,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <header> tags with text content
-  const MAX_HEADERS_HTML = 10;
   const headerHtmlElements = document.querySelectorAll('header');
   const headerArray = Array.from(headerHtmlElements).slice(0, MAX_HEADERS_HTML);
   headerArray.forEach((element, index) => {
@@ -404,7 +421,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <blockquote> tags
-  const MAX_BLOCKQUOTES = 50;
   const blockquoteElements = document.querySelectorAll('blockquote');
   const blockquoteArray = Array.from(blockquoteElements).slice(0, MAX_BLOCKQUOTES);
   blockquoteArray.forEach((element, index) => {
@@ -420,7 +436,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <code> tags
-  const MAX_CODE = 200;
   const codeElements = document.querySelectorAll('code');
   const codeArray = Array.from(codeElements).slice(0, MAX_CODE);
   codeArray.forEach((element, index) => {
@@ -436,7 +451,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <pre> tags
-  const MAX_PRE = 100;
   const preElements = document.querySelectorAll('pre');
   const preArray = Array.from(preElements).slice(0, MAX_PRE);
   preArray.forEach((element, index) => {
@@ -452,7 +466,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <cite> tags
-  const MAX_CITES = 30;
   const citeElements = document.querySelectorAll('cite');
   const citeArray = Array.from(citeElements).slice(0, MAX_CITES);
   citeArray.forEach((element, index) => {
@@ -468,7 +481,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <abbr> tags (title attribute)
-  const MAX_ABBR = 30;
   const abbrElements = document.querySelectorAll('abbr');
   const abbrArray = Array.from(abbrElements).slice(0, MAX_ABBR);
   abbrArray.forEach((element, index) => {
@@ -485,7 +497,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <time> tags (datetime attribute)
-  const MAX_TIME = 30;
   const timeElements = document.querySelectorAll('time');
   const timeArray = Array.from(timeElements).slice(0, MAX_TIME);
   timeArray.forEach((element, index) => {
@@ -502,7 +513,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <mark> tags
-  const MAX_MARKS = 50;
   const markElements = document.querySelectorAll('mark');
   const markArray = Array.from(markElements).slice(0, MAX_MARKS);
   markArray.forEach((element, index) => {
@@ -518,7 +528,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <button> tags
-  const MAX_BUTTONS = 50;
   const buttonElements = document.querySelectorAll('button');
   const buttonArray = Array.from(buttonElements).slice(0, MAX_BUTTONS);
   buttonArray.forEach((element, index) => {
@@ -535,7 +544,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <textarea> tags
-  const MAX_TEXTAREAS = 30;
   const textareaElements = document.querySelectorAll('textarea');
   const textareaArray = Array.from(textareaElements).slice(0, MAX_TEXTAREAS);
   textareaArray.forEach((element, index) => {
@@ -550,7 +558,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <select> tags
-  const MAX_SELECTS = 30;
   const selectElements = document.querySelectorAll('select');
   const selectArray = Array.from(selectElements).slice(0, MAX_SELECTS);
   selectArray.forEach((element, index) => {
@@ -569,7 +576,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <label> tags
-  const MAX_LABELS = 50;
   const labelElements = document.querySelectorAll('label');
   const labelArray = Array.from(labelElements).slice(0, MAX_LABELS);
   labelArray.forEach((element, index) => {
@@ -585,7 +591,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <figure> tags with figcaption
-  const MAX_FIGURES = 30;
   const figureElements = document.querySelectorAll('figure');
   const figureArray = Array.from(figureElements).slice(0, MAX_FIGURES);
   figureArray.forEach((element, index) => {
@@ -606,7 +611,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <details> tags
-  const MAX_DETAILS = 30;
   const detailsElements = document.querySelectorAll('details');
   const detailsArray = Array.from(detailsElements).slice(0, MAX_DETAILS);
   detailsArray.forEach((element, index) => {
@@ -624,7 +628,6 @@ function extractHeadings(settings) {
   });
 
   // Extract <summary> tags
-  const MAX_SUMMARIES = 30;
   const summaryElements = document.querySelectorAll('summary');
   const summaryArray = Array.from(summaryElements).slice(0, MAX_SUMMARIES);
   summaryArray.forEach((element, index) => {
@@ -641,7 +644,6 @@ function extractHeadings(settings) {
 
   // Extract ARIA labels and descriptions (for SPA frameworks like React, Vue)
   // This captures accessibility attributes that serve as semantic labels
-  const MAX_ARIA_ELEMENTS = 200;
   const ariaElements = document.querySelectorAll('[aria-label], [aria-description]');
   const ariaArray = Array.from(ariaElements).slice(0, MAX_ARIA_ELEMENTS);
   ariaArray.forEach((element, index) => {
@@ -659,7 +661,6 @@ function extractHeadings(settings) {
   // Extract data-* attributes (commonly used by frameworks like Bootstrap, jQuery UI, etc.)
   // These store useful text in data-title, data-tooltip, data-content, data-label, etc.
   const dataAttributes = ['data-title', 'data-tooltip', 'data-content', 'data-label', 'data-text', 'data-name', 'data-value', 'data-description', 'data-placeholder'];
-  const MAX_DATA_ELEMENTS = 200;
   
   // Build selector for all data attributes
   const dataSelector = dataAttributes.map(attr => '[' + attr + ']').join(', ');
@@ -4993,7 +4994,7 @@ class YouTabsCore {
             target: { tabId: tabId },
             world: 'MAIN', // Run in page's main world to bypass CSP
             func: extractHeadings,
-            args: [{ maxIndexChars: maxChars }]
+            args: [this.settings]
           });
           console.log('indexPageHeadings: executeScript results:', results);
           if (results && results[0] && results[0].result) {
@@ -5034,10 +5035,10 @@ class YouTabsCore {
     }
     
     // Prevent queue from growing indefinitely - drop oldest if too large
-    const MAX_QUEUE_SIZE = 50;
-    if (this._indexQueue.length > MAX_QUEUE_SIZE) {
+    const maxQueueSize = this.settings?.maxQueueSize || 50;
+    if (this._indexQueue.length > maxQueueSize) {
       console.warn('_processIndexQueue: Queue too large, trimming from', this._indexQueue.length);
-      this._indexQueue = this._indexQueue.slice(-MAX_QUEUE_SIZE);
+      this._indexQueue = this._indexQueue.slice(-maxQueueSize);
     }
     
     this._isIndexing = true;
@@ -5104,7 +5105,7 @@ class YouTabsCore {
             target: { tabId: tabId },
             world: 'MAIN',
             func: extractHeadings,
-            args: [{ maxIndexChars: maxChars }]
+            args: [this.settings]
           });
           if (results && results[0] && results[0].result) {
             headings = results[0].result;
