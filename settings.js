@@ -5,15 +5,15 @@
 
 // Initialize SettingsManager - wrapped in IIFE to avoid global pollution
 (function() {
-  const settingsManager = new SettingsManager();
+  window.settingsManager = new SettingsManager();
 
   // Expose functions to global scope
   window.loadSettings = async function() {
-    return settingsManager.getAll();
+    return window.settingsManager.getAll();
   };
 
   window.saveSettings = async function(settings) {
-    return settingsManager.save(settings);
+    return window.settingsManager.save(settings);
   };
 })();
 
@@ -102,6 +102,9 @@ async function initSettings() {
   
   // Initialize search
   initSearch();
+  
+  // Initialize reset button
+  initResetButton();
 }
 
 // Initialize category navigation
@@ -164,6 +167,57 @@ function initSearch() {
     
     performSearch(query);
   }, 150));
+}
+
+// Initialize reset settings button
+function initResetButton() {
+  const resetBtn = document.getElementById('resetSettingsBtn');
+  const modalOverlay = document.getElementById('resetModalOverlay');
+  const modalClose = document.getElementById('resetModalClose');
+  const modalCancel = document.getElementById('resetModalCancel');
+  const modalConfirm = document.getElementById('resetModalConfirm');
+  
+  if (!resetBtn || !modalOverlay) return;
+  
+  // Open modal on button click
+  resetBtn.addEventListener('click', () => {
+    modalOverlay.classList.add('active');
+  });
+  
+  // Close modal functions
+  const closeModal = () => {
+    modalOverlay.classList.remove('active');
+  };
+  
+  if (modalClose) {
+    modalClose.addEventListener('click', closeModal);
+  }
+  
+  if (modalCancel) {
+    modalCancel.addEventListener('click', closeModal);
+  }
+  
+  // Close on overlay click
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      closeModal();
+    }
+  });
+  
+  // Confirm reset
+  if (modalConfirm) {
+    modalConfirm.addEventListener('click', async () => {
+      try {
+        await settingsManager.reset();
+        closeModal();
+        // Reload the page to reflect all changes
+        location.reload();
+      } catch (error) {
+        console.error('Error resetting settings:', error);
+        alert('Не удалось сбросить настройки. Пожалуйста, попробуйте еще раз.');
+      }
+    });
+  }
 }
 
 // Perform search
