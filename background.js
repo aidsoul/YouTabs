@@ -108,8 +108,9 @@ async function getCurrentWindowTabs() {
 // Helper function to get settings
 async function getSettings() {
   try {
-    const stored = await browser.storage.local.get('settings');
-    return { success: true, settings: stored.settings || {} };
+    const settingsManager = new SettingsManager();
+    const settings = await settingsManager.getAll();
+    return { success: true, settings };
   } catch (error) {
     console.error('Error getting settings:', error);
     return { success: false, error: error.message, settings: {} };

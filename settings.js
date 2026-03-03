@@ -3,90 +3,23 @@
  * Handles settings page interactions
  */
 
-// Default settings
-const defaultSettings = {
-  showFavicon: true,
-  showAudio: true,
-  closeOnSelect: true,
-  enablePageSearch: true,
-  maxSearchResults: 15,
-  // Search panel on page
-  showSearchPanel: false,
-  // Index expiration settings (default: 3 days)
-  indexExpirationDays: 3,
-  indexExpirationHours: 0,
-  indexExpirationMinutes: 0,
-  // Index character limit
-  maxIndexChars: 250,
-  // Element extraction limits
-  maxDivs: 50,
-  maxLists: 50,
-  maxLIs: 100,
-  maxFileInputs: 20,
-  maxDownloadLinks: 20,
-  maxVideos: 20,
-  maxAudios: 20,
-  maxIframes: 20,
-  maxSpans: 100,
-  maxTables: 30,
-  maxSections: 30,
-  maxArticles: 20,
-  maxAsides: 15,
-  maxNavs: 10,
-  maxFooters: 10,
-  maxHeaders: 10,
-  maxBlockquotes: 50,
-  maxCode: 200,
-  maxPre: 100,
-  maxCites: 30,
-  maxAbbr: 30,
-  maxTime: 30,
-  maxMarks: 50,
-  maxButtons: 50,
-  maxTextareas: 30,
-  maxSelects: 30,
-  maxLabels: 50,
-  maxFigures: 30,
-  maxDetails: 30,
-  maxSummaries: 30,
-  maxAriaElements: 200,
-  maxDataElements: 200,
-  maxQueueSize: 50,
-  // Performance settings
-  indexThrottleMs: 1000,
-  maxIndexedPages: 1000,
-  lazyLoadGroups: false,
-  // Grouping settings
-  enableGrouping: true,
-  groupingType: 'custom',
-  collapsedGroups: [],
-  // Action buttons panel
-  enableActionButtonsLeft: false
-};
+// Initialize SettingsManager - wrapped in IIFE to avoid global pollution
+(function() {
+  const settingsManager = new SettingsManager();
+
+  // Expose functions to global scope
+  window.loadSettings = async function() {
+    return settingsManager.getAll();
+  };
+
+  window.saveSettings = async function(settings) {
+    return settingsManager.save(settings);
+  };
+})();
 
 // Current category
 let currentCategory = 'general';
 let isSearchActive = false;
-
-// Load settings
-async function loadSettings() {
-  try {
-    const stored = await browser.storage.local.get('settings');
-    return { ...defaultSettings, ...stored.settings };
-  } catch (error) {
-    console.error('Error loading settings:', error);
-    return defaultSettings;
-  }
-}
-
-// Save settings
-async function saveSettings(settings) {
-  try {
-    await browser.storage.local.set({ settings });
-  } catch (error) {
-    console.error('Error saving settings:', error);
-  }
-}
 
 // Initialize settings page
 async function initSettings() {

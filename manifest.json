@@ -48,7 +48,7 @@
     }
   ],
   "background": {
-    "scripts": ["db.js", "background.js"]
+    "scripts": ["db.js", "settings-manager.js", "background.js"]
   },
   "web_accessible_resources": [
     {

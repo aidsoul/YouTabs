@@ -3,6 +3,17 @@
  * Shared functionality for sidebar and popup scripts
  */
 
+// Settings manager instance
+let settingsManager = null;
+
+// Get or create SettingsManager instance
+function getSettingsManager() {
+  if (!settingsManager) {
+    settingsManager = new SettingsManager();
+  }
+  return settingsManager;
+}
+
 // Extract headings (h1-h6) and other content from a page - used by executeScript
 function extractHeadings(settings) {
   settings = settings || {};
@@ -906,29 +917,11 @@ class YouTabsCore {
     this.totalFilterTypes = this.filterHeadingTypes.length;
     this.hasActiveFilter = false;
     
-    this.settings = {
-      showFavicon: true,
-      showAudio: true,
-      closeOnSelect: options.closeOnSelect ?? true,
-      enablePageSearch: true,
-      maxSearchResults: 15,
-      // Index expiration settings (default: 3 days)
-      indexExpirationDays: 3,
-      indexExpirationHours: 0,
-      indexExpirationMinutes: 0,
-      // Index character limit
-      maxIndexChars: 250,
-      // Performance settings
-      indexThrottleMs: 1000,
-      maxIndexedPages: 1000,
-      lazyLoadGroups: false,
-      enableGrouping: true,
-      groupingType: 'custom',
-      collapsedGroups: [],
-      collapsedTabs: [],
-      // Action buttons panel
-      enableActionButtonsLeft: false
-    };
+    // Settings manager
+    this.settingsManager = getSettingsManager();
+    
+    // Settings (synced with SettingsManager)
+    this.settings = {};
     
     // Custom user groups
     this.customGroups = [];
@@ -1934,10 +1927,8 @@ class YouTabsCore {
   
   async loadSettings() {
     try {
-      const stored = await browser.storage.local.get('settings');
-      if (stored.settings) {
-        this.settings = { ...this.settings, ...stored.settings };
-      }
+      // Load settings from SettingsManager
+      this.settings = await this.settingsManager.getAll();
       
       // Migrate from localStorage to IndexedDB if needed
       if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
@@ -4043,7 +4034,7 @@ class YouTabsCore {
       }
       
       this.settings.collapsedTabs = collapsedTabs;
-      browser.storage.local.set({ collapsedTabs });
+      this.settingsManager.save(this.settings);
     } catch (error) {
       console.error('Error saving tab collapsed state:', error);
     }
@@ -4130,9 +4121,7 @@ class YouTabsCore {
       
       this.settings.collapsedGroups = collapsedGroups;
       
-      await browser.storage.local.set({
-        settings: { ...this.settings }
-      });
+      await this.settingsManager.save(this.settings);
     } catch (error) {
       console.error('Error saving collapsed state:', error);
     }
