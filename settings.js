@@ -244,6 +244,11 @@ function performSearch(query) {
   let foundItems = [];
   
   allItems.forEach(item => {
+    // Skip items inside search results container to avoid duplicates
+    if (item.closest('#searchResultsContainer')) {
+      return;
+    }
+    
     const keywords = item.dataset.keywords || '';
     const label = item.querySelector('.settings-label')?.textContent || '';
     const description = item.querySelector('.settings-description')?.textContent || '';
