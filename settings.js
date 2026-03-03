@@ -13,7 +13,17 @@
   };
 
   window.saveSettings = async function(settings) {
-    return window.settingsManager.save(settings);
+    await window.settingsManager.save(settings);
+    // Notify content scripts about settings change
+    try {
+      await browser.tabs.query({}).then(tabs => {
+        tabs.forEach(tab => {
+          browser.tabs.sendMessage(tab.id, { action: 'settingsChanged' }).catch(() => {});
+        });
+      });
+    } catch (e) {
+      console.warn('Failed to notify content scripts of settings change:', e);
+    }
   };
 })();
 

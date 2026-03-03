@@ -3,12 +3,92 @@
  * Handles messages from the sidebar to scroll to headings and other elements
  */
 
+// Settings cache
+let cachedSettings = null;
+let cacheTimestamp = null;
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Clear settings cache (call when settings change)
+ */
+function clearSettingsCache() {
+  cachedSettings = null;
+  cacheTimestamp = null;
+}
+
+/**
+ * Check if cache is expired
+ * @returns {boolean} True if cache is expired or null
+ */
+function isCacheExpired() {
+  if (!cachedSettings || !cacheTimestamp) {
+    return true;
+  }
+  return Date.now() - cacheTimestamp > CACHE_EXPIRY_MS;
+}
+
+/**
+ * Get settings from SettingsManager
+ * @returns {Promise<Object>} Settings object
+ */
+async function getSettings() {
+  if (cachedSettings && !isCacheExpired()) {
+    return cachedSettings;
+  }
+  try {
+    const settingsManager = new SettingsManager();
+    cachedSettings = await settingsManager.getAll();
+    cacheTimestamp = Date.now();
+    return cachedSettings;
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    // Return defaults
+    return {
+      maxTextLength: 1000,
+      maxIndexChars: 250,
+      maxParagraphs: 100,
+      maxLinks: 100,
+      maxImages: 50,
+      maxDivs: 50,
+      maxSpans: 100,
+      maxTables: 30,
+      maxSections: 30,
+      maxArticles: 20,
+      maxAsides: 15,
+      maxNavs: 10,
+      maxFooters: 10,
+      maxHeaders: 10,
+      maxBlockquotes: 50,
+      maxCode: 200,
+      maxPre: 100,
+      maxCites: 30,
+      maxAbbr: 30,
+      maxTime: 30,
+      maxMarks: 50,
+      maxButtons: 50,
+      maxTextareas: 30,
+      maxSelects: 30,
+      maxLabels: 50,
+      maxFigures: 30,
+      maxDetails: 30,
+      maxSummaries: 30
+    };
+  }
+}
+
 // Listen for messages from the extension
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Handle settings change notification
+  if (message.action === 'settingsChanged') {
+    clearSettingsCache();
+    return false;
+  }
+  
   // Handle extract headings request from background script
   if (message.action === 'extractHeadings') {
-    const headings = extractPageHeadings();
-    sendResponse({ headings: headings });
+    extractPageHeadings().then(headings => {
+      sendResponse({ headings: headings });
+    });
     return true;
   }
   
@@ -63,35 +143,39 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const selectedText = message.text;
     const pageUrl = message.url;
     
-    // Validate text length
-    const MAX_TEXT_LENGTH = 10000;
-    if (!selectedText || selectedText.length === 0) {
-      sendResponse({ success: false, error: 'No text provided' });
-      return true;
-    }
-    if (selectedText.length > MAX_TEXT_LENGTH) {
-      sendResponse({ success: false, error: 'Text exceeds maximum length of ' + MAX_TEXT_LENGTH });
-      return true;
-    }
-    
-    // Validate URL
-    if (!pageUrl) {
-      sendResponse({ success: false, error: 'No URL provided' });
-      return true;
-    }
-    try {
-      new URL(pageUrl);
-    } catch (e) {
-      sendResponse({ success: false, error: 'Invalid URL' });
-      return true;
-    }
-    
-    if (selectedText && pageUrl) {
-      addSelectedTextToIndex(selectedText, pageUrl).then(result => {
-        sendResponse(result);
-      });
-      return true; // Keep channel open for async response
-    }
+    getSettings().then(textSettings => {
+      const MAX_TEXT_LENGTH = textSettings.maxTextLength || 10000;
+      
+      // Validate text length
+      if (!selectedText || selectedText.length === 0) {
+        sendResponse({ success: false, error: 'No text provided' });
+        return true;
+      }
+      if (selectedText.length > MAX_TEXT_LENGTH) {
+        sendResponse({ success: false, error: 'Text exceeds maximum length of ' + MAX_TEXT_LENGTH });
+        return true;
+      }
+      
+      // Validate URL
+      if (!pageUrl) {
+        sendResponse({ success: false, error: 'No URL provided' });
+        return true;
+      }
+      try {
+        new URL(pageUrl);
+      } catch (e) {
+        sendResponse({ success: false, error: 'Invalid URL' });
+        return true;
+      }
+      
+      if (selectedText && pageUrl) {
+        addSelectedTextToIndex(selectedText, pageUrl).then(result => {
+          sendResponse(result);
+        });
+        return true; // Keep channel open for async response
+      }
+    });
+    return true;
   }
 
   return true; // Keep the message channel open for async response
@@ -125,9 +209,10 @@ function getHeadingId(element, type, fallbackIndex) {
 }
 
 // Build a map of current headings for quick lookup
-function buildHeadingsMap() {
+async function buildHeadingsMap() {
+  const settings = await getSettings();
   const map = new Map();
-  const MAX_LENGTH = 250;
+  const MAX_LENGTH = settings.maxIndexChars || 250;
   const truncate = (text) => {
     const trimmed = text.trim();
     if (trimmed.length > MAX_LENGTH) {
@@ -231,8 +316,8 @@ function handleMutations() {
     clearTimeout(observerDebounceTimer);
   }
 
-  observerDebounceTimer = setTimeout(() => {
-    const newHeadingsMap = buildHeadingsMap();
+  observerDebounceTimer = setTimeout(async () => {
+    const newHeadingsMap = await buildHeadingsMap();
     const changes = detectHeadingChanges(currentHeadingsMap, newHeadingsMap);
     
     if (changes.added.length > 0 || changes.modified.length > 0 || changes.removed.length > 0) {
@@ -243,14 +328,14 @@ function handleMutations() {
 }
 
 // Start observing DOM changes
-function startObserving() {
+async function startObserving() {
   if (observerInstance) {
     console.log('YouTabs: Observer already running');
     return;
   }
 
   // Build initial headings map
-  currentHeadingsMap = buildHeadingsMap();
+  currentHeadingsMap = await buildHeadingsMap();
   console.log('YouTabs: Starting MutationObserver with', currentHeadingsMap.size, 'initial headings');
 
   // Create and start observer
@@ -280,12 +365,12 @@ if (document.body) {
 
 // Also watch for page navigation in SPAs
 let lastUrl = window.location.href;
-const urlObserver = new MutationObserver(() => {
+const urlObserver = new MutationObserver(async () => {
   if (window.location.href !== lastUrl) {
     lastUrl = window.location.href;
     console.log('YouTabs: URL changed to', lastUrl);
     // Reset headings map for new page
-    currentHeadingsMap = buildHeadingsMap();
+    currentHeadingsMap = await buildHeadingsMap();
   }
 });
 
@@ -1217,8 +1302,9 @@ function getUrlKey(url) {
 }
 
 // Extract headings and content from the page (used by background script)
-function extractPageHeadings() {
-  const MAX_LENGTH = 250;
+async function extractPageHeadings() {
+  const settings = await getSettings();
+  const MAX_LENGTH = settings.maxIndexChars || 250;
   const headings = [];
   
   const truncate = (text) => {
@@ -1302,7 +1388,7 @@ function extractPageHeadings() {
   });
   
   // Extract <p> tags
-  const MAX_PARAGRAPHS = 100;
+  const MAX_PARAGRAPHS = settings.maxParagraphs || 100;
   const pElements = document.querySelectorAll('p');
   const pArray = Array.from(pElements).slice(0, MAX_PARAGRAPHS);
   pArray.forEach((element, index) => {
@@ -1318,7 +1404,7 @@ function extractPageHeadings() {
   });
   
   // Extract <a> tags with text
-  const MAX_LINKS = 100;
+  const MAX_LINKS = settings.maxLinks || 100;
   const aElements = document.querySelectorAll('a');
   const aArray = Array.from(aElements).slice(0, MAX_LINKS);
   aArray.forEach((element, index) => {
@@ -1336,7 +1422,7 @@ function extractPageHeadings() {
   });
   
   // Extract <img> tags with alt text
-  const MAX_IMAGES = 50;
+  const MAX_IMAGES = settings.maxImages || 50;
   const imgElements = document.querySelectorAll('img');
   const imgArray = Array.from(imgElements).slice(0, MAX_IMAGES);
   imgArray.forEach((element, index) => {
@@ -1354,7 +1440,7 @@ function extractPageHeadings() {
   });
   
   // Extract <div> tags with text content (limit to prevent performance issues)
-  const MAX_DIVS = 50;
+  const MAX_DIVS = settings.maxDivs || 50;
   const divElements = document.querySelectorAll('div');
   const divArray = Array.from(divElements).slice(0, MAX_DIVS);
   divArray.forEach((element, index) => {
@@ -1371,7 +1457,7 @@ function extractPageHeadings() {
   });
   
   // Extract <span> tags with text content (limit to prevent performance issues)
-  const MAX_SPANS = 100;
+  const MAX_SPANS = settings.maxSpans || 100;
   const spanElements = document.querySelectorAll('span');
   const spanArray = Array.from(spanElements).slice(0, MAX_SPANS);
   spanArray.forEach((element, index) => {
@@ -1388,7 +1474,7 @@ function extractPageHeadings() {
   });
   
   // Extract <table> tags with headers and captions
-  const MAX_TABLES = 30;
+  const MAX_TABLES = settings.maxTables || 30;
   const tableElements = document.querySelectorAll('table');
   const tableArray = Array.from(tableElements).slice(0, MAX_TABLES);
   tableArray.forEach((element, index) => {
@@ -1437,7 +1523,7 @@ function extractPageHeadings() {
   });
   
   // Extract <section> tags with text content
-  const MAX_SECTIONS = 30;
+  const MAX_SECTIONS = settings.maxSections || 30;
   const sectionElements = document.querySelectorAll('section');
   const sectionArray = Array.from(sectionElements).slice(0, MAX_SECTIONS);
   sectionArray.forEach((element, index) => {
@@ -1453,7 +1539,7 @@ function extractPageHeadings() {
   });
   
   // Extract <article> tags with text content
-  const MAX_ARTICLES = 20;
+  const MAX_ARTICLES = settings.maxArticles || 20;
   const articleElements = document.querySelectorAll('article');
   const articleArray = Array.from(articleElements).slice(0, MAX_ARTICLES);
   articleArray.forEach((element, index) => {
@@ -1469,7 +1555,7 @@ function extractPageHeadings() {
   });
   
   // Extract <aside> tags with text content
-  const MAX_ASIDES = 15;
+  const MAX_ASIDES = settings.maxAsides || 15;
   const asideElements = document.querySelectorAll('aside');
   const asideArray = Array.from(asideElements).slice(0, MAX_ASIDES);
   asideArray.forEach((element, index) => {
@@ -1485,7 +1571,7 @@ function extractPageHeadings() {
   });
   
   // Extract <nav> tags with text content
-  const MAX_NAVS = 10;
+  const MAX_NAVS = settings.maxNavs || 10;
   const navElements = document.querySelectorAll('nav');
   const navArray = Array.from(navElements).slice(0, MAX_NAVS);
   navArray.forEach((element, index) => {
@@ -1501,7 +1587,7 @@ function extractPageHeadings() {
   });
   
   // Extract <footer> tags with text content
-  const MAX_FOOTERS = 10;
+  const MAX_FOOTERS = settings.maxFooters || 10;
   const footerElements = document.querySelectorAll('footer');
   const footerArray = Array.from(footerElements).slice(0, MAX_FOOTERS);
   footerArray.forEach((element, index) => {
@@ -1517,7 +1603,7 @@ function extractPageHeadings() {
   });
   
   // Extract <header> tags with text content
-  const MAX_HEADERS = 10;
+  const MAX_HEADERS = settings.maxHeaders || 10;
   const headerHtmlElements = document.querySelectorAll('header');
   const headerArray = Array.from(headerHtmlElements).slice(0, MAX_HEADERS);
   headerArray.forEach((element, index) => {
@@ -1533,7 +1619,7 @@ function extractPageHeadings() {
   });
   
   // Extract <blockquote> tags
-  const MAX_BLOCKQUOTES = 50;
+  const MAX_BLOCKQUOTES = settings.maxBlockquotes || 50;
   const blockquoteElements = document.querySelectorAll('blockquote');
   const blockquoteArray = Array.from(blockquoteElements).slice(0, MAX_BLOCKQUOTES);
   blockquoteArray.forEach((element, index) => {
@@ -1549,7 +1635,7 @@ function extractPageHeadings() {
   });
   
   // Extract <code> tags
-  const MAX_CODE = 200;
+  const MAX_CODE = settings.maxCode || 200;
   const codeElements = document.querySelectorAll('code');
   const codeArray = Array.from(codeElements).slice(0, MAX_CODE);
   codeArray.forEach((element, index) => {
@@ -1565,7 +1651,7 @@ function extractPageHeadings() {
   });
   
   // Extract <pre> tags
-  const MAX_PRE = 100;
+  const MAX_PRE = settings.maxPre || 100;
   const preElements = document.querySelectorAll('pre');
   const preArray = Array.from(preElements).slice(0, MAX_PRE);
   preArray.forEach((element, index) => {
@@ -1581,7 +1667,7 @@ function extractPageHeadings() {
   });
   
   // Extract <cite> tags
-  const MAX_CITES = 30;
+  const MAX_CITES = settings.maxCites || 30;
   const citeElements = document.querySelectorAll('cite');
   const citeArray = Array.from(citeElements).slice(0, MAX_CITES);
   citeArray.forEach((element, index) => {
@@ -1597,7 +1683,7 @@ function extractPageHeadings() {
   });
   
   // Extract <abbr> tags (title attribute)
-  const MAX_ABBR = 30;
+  const MAX_ABBR = settings.maxAbbr || 30;
   const abbrElements = document.querySelectorAll('abbr');
   const abbrArray = Array.from(abbrElements).slice(0, MAX_ABBR);
   abbrArray.forEach((element, index) => {
@@ -1614,7 +1700,7 @@ function extractPageHeadings() {
   });
   
   // Extract <time> tags (datetime attribute)
-  const MAX_TIME = 30;
+  const MAX_TIME = settings.maxTime || 30;
   const timeElements = document.querySelectorAll('time');
   const timeArray = Array.from(timeElements).slice(0, MAX_TIME);
   timeArray.forEach((element, index) => {
@@ -1631,7 +1717,7 @@ function extractPageHeadings() {
   });
   
   // Extract <mark> tags
-  const MAX_MARKS = 50;
+  const MAX_MARKS = settings.maxMarks || 50;
   const markElements = document.querySelectorAll('mark');
   const markArray = Array.from(markElements).slice(0, MAX_MARKS);
   markArray.forEach((element, index) => {
@@ -1647,7 +1733,7 @@ function extractPageHeadings() {
   });
   
   // Extract <button> tags
-  const MAX_BUTTONS = 50;
+  const MAX_BUTTONS = settings.maxButtons || 50;
   const buttonElements = document.querySelectorAll('button');
   const buttonArray = Array.from(buttonElements).slice(0, MAX_BUTTONS);
   buttonArray.forEach((element, index) => {
@@ -1664,7 +1750,7 @@ function extractPageHeadings() {
   });
   
   // Extract <textarea> tags
-  const MAX_TEXTAREAS = 30;
+  const MAX_TEXTAREAS = settings.maxTextareas || 30;
   const textareaElements = document.querySelectorAll('textarea');
   const textareaArray = Array.from(textareaElements).slice(0, MAX_TEXTAREAS);
   textareaArray.forEach((element, index) => {
@@ -1688,7 +1774,7 @@ function extractPageHeadings() {
   });
   
   // Extract <select> tags
-  const MAX_SELECTS = 30;
+  const MAX_SELECTS = settings.maxSelects || 30;
   const selectElements = document.querySelectorAll('select');
   const selectArray = Array.from(selectElements).slice(0, MAX_SELECTS);
   selectArray.forEach((element, index) => {
@@ -1709,7 +1795,7 @@ function extractPageHeadings() {
   });
   
   // Extract <label> tags
-  const MAX_LABELS = 50;
+  const MAX_LABELS = settings.maxLabels || 50;
   const labelElements = document.querySelectorAll('label');
   const labelArray = Array.from(labelElements).slice(0, MAX_LABELS);
   labelArray.forEach((element, index) => {
@@ -1725,7 +1811,7 @@ function extractPageHeadings() {
   });
   
   // Extract <figure> tags with figcaption
-  const MAX_FIGURES = 30;
+  const MAX_FIGURES = settings.maxFigures || 30;
   const figureElements = document.querySelectorAll('figure');
   const figureArray = Array.from(figureElements).slice(0, MAX_FIGURES);
   figureArray.forEach((element, index) => {
@@ -1749,7 +1835,7 @@ function extractPageHeadings() {
   });
   
   // Extract <details> tags
-  const MAX_DETAILS = 30;
+  const MAX_DETAILS = settings.maxDetails || 30;
   const detailsElements = document.querySelectorAll('details');
   const detailsArray = Array.from(detailsElements).slice(0, MAX_DETAILS);
   detailsArray.forEach((element, index) => {
@@ -1768,7 +1854,7 @@ function extractPageHeadings() {
   });
   
   // Extract <summary> tags
-  const MAX_SUMMARIES = 30;
+  const MAX_SUMMARIES = settings.maxSummaries || 30;
   const summaryElements = document.querySelectorAll('summary');
   const summaryArray = Array.from(summaryElements).slice(0, MAX_SUMMARIES);
   summaryArray.forEach((element, index) => {

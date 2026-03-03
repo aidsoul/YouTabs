@@ -20,6 +20,10 @@ class SettingsManager {
     // Index character limit
     maxIndexChars: 250,
     // Element extraction limits
+    maxTextLength: 1000,
+    maxParagraphs: 100,
+    maxLinks: 100,
+    maxImages: 50,
     maxDivs: 50,
     maxLists: 50,
     maxLIs: 100,
