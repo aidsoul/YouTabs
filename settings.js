@@ -10,12 +10,18 @@ const defaultSettings = {
   closeOnSelect: true,
   enablePageSearch: true,
   maxSearchResults: 15,
+  // Search panel on page
+  showSearchPanel: false, // Show navigation panel on page when searching
   // Index expiration settings (default: 3 days)
   indexExpirationDays: 3,
   indexExpirationHours: 0,
   indexExpirationMinutes: 0,
   // Index character limit
   maxIndexChars: 250,
+  // Performance settings
+  indexThrottleMs: 1000, // Delay between indexing operations (ms)
+  maxIndexedPages: 1000, // Maximum number of pages to index
+  lazyLoadGroups: false, // Load group content on demand
   // Grouping settings
   enableGrouping: true,
   groupingType: 'custom', // 'domain', 'color', 'time', 'custom'

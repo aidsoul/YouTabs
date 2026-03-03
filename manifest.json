@@ -50,6 +50,12 @@
   "background": {
     "scripts": ["db.js", "background.js"]
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["indexer-worker.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "you-tabs@extension.firefox",

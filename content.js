@@ -783,24 +783,164 @@ function getPathTo(element) {
 function scrollToElement(element) {
   element.scrollIntoView({ behavior: 'smooth', block: 'start' });
   
-  // Add a temporary highlight
+  // Add a temporary highlight with improved styling
   const originalBackgroundColor = element.style.backgroundColor;
   const originalTransition = element.style.transition;
-  element.style.backgroundColor = 'rgba(33, 150, 243, 0.2)';
-  element.style.transition = 'background-color 0.5s ease';
+  const originalBoxShadow = element.style.boxShadow;
+  
+  element.style.backgroundColor = 'rgba(33, 150, 243, 0.3)';
+  element.style.transition = 'background-color 0.5s ease, box-shadow 0.5s ease';
+  element.style.boxShadow = '0 0 0 3px rgba(33, 150, 243, 0.3)';
+  element.style.borderRadius = '4px';
   
   setTimeout(() => {
     element.style.backgroundColor = originalBackgroundColor;
     element.style.transition = originalTransition;
-  }, 1500);
+    element.style.boxShadow = originalBoxShadow;
+  }, 2000);
 }
 
+// Track current highlight state for navigation
+let currentHighlightIndex = -1;
+let totalHighlights = 0;
+let highlightElements = [];
+let searchPanelEnabled = false;
+let settingsLoadedPromise = null;
+
+// Load settings to check if search panel is enabled
+async function loadSearchPanelSetting() {
+  try {
+    const stored = await browser.storage.local.get('settings');
+    if (stored.settings && stored.settings.showSearchPanel === true) {
+      searchPanelEnabled = true;
+    } else {
+      searchPanelEnabled = false;
+    }
+  } catch (e) {
+    searchPanelEnabled = false;
+  }
+}
+
+// Initialize settings on load - store promise for awaiting
+settingsLoadedPromise = loadSearchPanelSetting();
+
 // Highlight search text on the page
-function highlightSearchText(query) {
+async function highlightSearchText(query) {
   if (!query || query.length < 2) return;
   
+  // Wait for settings to load if not yet complete
+  if (settingsLoadedPromise) {
+    await settingsLoadedPromise;
+    settingsLoadedPromise = null; // Clear to avoid re-awaiting
+  }
+  
+  // Check if search panel is enabled
+  if (!searchPanelEnabled) {
+    // Just highlight without showing panel
+    highlightTextOnly(query);
+    return;
+  }
+  
+  // Full highlight with panel
+  highlightTextWithPanel(query);
+}
+
+// Highlight text without showing panel
+function highlightTextOnly(query) {
   // Remove any existing highlights first
   removeHighlights();
+  removeHighlightUI();
+  
+  // Create marker element to walk through the DOM
+  const marker = document.createElement('div');
+  marker.style.display = 'none';
+  document.body.appendChild(marker);
+  
+  // Use TreeWalker to find text nodes
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: function(node) {
+        // Skip script, style, and already highlighted elements
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        
+        const tagName = parent.tagName.toLowerCase();
+        if (tagName === 'script' || 
+            tagName === 'style' || 
+            tagName === 'noscript' || 
+            tagName === 'textarea' || 
+            tagName === 'input' ||
+            parent.classList.contains('yt-highlight-mark')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        
+        // Only accept nodes with searchable text
+        if (node.textContent.trim().length > 0) {
+          return NodeFilter.FILTER_ACCEPT;
+        }
+        return NodeFilter.FILTER_REJECT;
+      }
+    }
+  );
+  
+  const textNodes = [];
+  let node;
+  while (node = walker.nextNode()) {
+    textNodes.push(node);
+  }
+  
+  // Search and highlight matches
+  const regex = new RegExp('(' + escapeRegExp(query) + ')', 'gi');
+  let matchesFound = 0;
+  const maxHighlights = 100;
+  
+  for (const textNode of textNodes) {
+    if (matchesFound >= maxHighlights) break;
+    
+    const text = textNode.textContent;
+    if (regex.test(text)) {
+      regex.lastIndex = 0;
+      
+      const span = document.createElement('span');
+      const originalText = text.replace(regex, '<mark class="yt-highlight-mark">$1</mark>');
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(originalText, 'text/html');
+      const tempDiv = doc.body;
+      while (tempDiv.firstChild) {
+        span.appendChild(tempDiv.firstChild);
+      }
+      
+      if (textNode.parentNode) {
+        textNode.parentNode.replaceChild(span, textNode);
+        matchesFound++;
+      }
+    }
+  }
+  
+  marker.remove();
+  
+  // Scroll to first match if found
+  if (matchesFound > 0) {
+    const firstHighlight = document.querySelector('.yt-highlight-mark');
+    if (firstHighlight) {
+      setTimeout(() => {
+        firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstHighlight.classList.add('yt-highlight-flash');
+        setTimeout(() => {
+          firstHighlight.classList.remove('yt-highlight-flash');
+        }, 1000);
+      }, 100);
+    }
+  }
+}
+
+// Highlight text with panel (when enabled)
+function highlightTextWithPanel(query) {
+  // Remove any existing highlights and UI elements
+  removeHighlights();
+  removeHighlightUI();
   
   // Create marker element to walk through the DOM
   const marker = document.createElement('div');
@@ -876,21 +1016,17 @@ function highlightSearchText(query) {
   // Clean up marker
   marker.remove();
   
-  // Scroll to first match if found
-  if (matchesFound > 0) {
-    const firstHighlight = document.querySelector('.yt-highlight-mark');
-    if (firstHighlight) {
-      // Delay slightly to allow rendering
-      setTimeout(() => {
-        firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // Add flash animation to first highlight
-        firstHighlight.classList.add('yt-highlight-flash');
-        setTimeout(() => {
-          firstHighlight.classList.remove('yt-highlight-flash');
-        }, 2000);
-      }, 100);
-    }
+  // Store highlight elements for navigation
+  highlightElements = Array.from(document.querySelectorAll('.yt-highlight-mark'));
+  totalHighlights = highlightElements.length;
+  currentHighlightIndex = -1;
+  
+  // Show match counter and navigation if matches found
+  if (totalHighlights > 0) {
+    showMatchCounter(totalHighlights);
+    showNavigationButtons();
+    // Auto-navigate to first match
+    navigateToHighlight(0);
   }
 }
 
@@ -905,6 +1041,132 @@ function removeHighlights() {
     }
   });
 }
+
+// Remove highlight UI elements (counter, navigation)
+function removeHighlightUI() {
+  const counter = document.querySelector('.yt-match-counter');
+  if (counter) counter.remove();
+  
+  const nav = document.querySelector('.yt-highlight-nav');
+  if (nav) nav.remove();
+  
+  // Reset tracking variables
+  currentHighlightIndex = -1;
+  totalHighlights = 0;
+  highlightElements = [];
+}
+
+// Show match counter badge
+function showMatchCounter(count) {
+  const counter = document.createElement('div');
+  counter.className = 'yt-match-counter';
+  counter.innerHTML = `
+    <span class="yt-match-icon">🔍</span>
+    <span class="yt-match-count">${count} match${count !== 1 ? 'es' : ''}</span>
+    <span class="yt-match-dismiss" title="Clear highlights">✕</span>
+  `;
+  
+  // Add click handler to dismiss
+  counter.querySelector('.yt-match-dismiss').addEventListener('click', () => {
+    counter.classList.add('yt-match-counter-hide');
+    setTimeout(() => {
+      removeHighlights();
+      removeHighlightUI();
+    }, 300);
+  });
+  
+  document.body.appendChild(counter);
+}
+
+// Show navigation buttons
+function showNavigationButtons() {
+  const nav = document.createElement('div');
+  nav.className = 'yt-highlight-nav';
+  nav.innerHTML = `
+    <button class="yt-highlight-nav-btn yt-prev-btn" title="Previous match (Arrow Up)">
+      <span class="yt-nav-icon">◀</span>
+      Prev
+    </button>
+    <button class="yt-highlight-nav-btn yt-next-btn" title="Next match (Arrow Down)">
+      Next
+      <span class="yt-nav-icon">▶</span>
+    </button>
+  `;
+  
+  // Add event listeners
+  nav.querySelector('.yt-prev-btn').addEventListener('click', () => navigateToHighlight(currentHighlightIndex - 1));
+  nav.querySelector('.yt-next-btn').addEventListener('click', () => navigateToHighlight(currentHighlightIndex + 1));
+  
+  document.body.appendChild(nav);
+  updateNavButtons();
+}
+
+// Navigate to specific highlight
+function navigateToHighlight(index) {
+  if (highlightElements.length === 0) return;
+  
+  // Remove current highlight class from previous
+  if (currentHighlightIndex >= 0 && currentHighlightIndex < highlightElements.length) {
+    const prev = highlightElements[currentHighlightIndex];
+    if (prev) {
+      prev.classList.remove('yt-highlight-current', 'yt-highlight-flash');
+    }
+  }
+  
+  // Wrap around index
+  if (index < 0) index = highlightElements.length - 1;
+  if (index >= highlightElements.length) index = 0;
+  
+  currentHighlightIndex = index;
+  const current = highlightElements[currentHighlightIndex];
+  
+  if (current) {
+    // Scroll to the element
+    current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Add current highlight class and flash
+    current.classList.add('yt-highlight-current', 'yt-highlight-flash');
+    setTimeout(() => {
+      current.classList.remove('yt-highlight-flash');
+    }, 1000);
+    
+    updateNavButtons();
+  }
+}
+
+// Update navigation button states
+function updateNavButtons() {
+  const prevBtn = document.querySelector('.yt-prev-btn');
+  const nextBtn = document.querySelector('.yt-next-btn');
+  
+  if (prevBtn && nextBtn) {
+    const positionText = totalHighlights > 0 ? `<span class="yt-nav-position">${currentHighlightIndex + 1}/${totalHighlights}</span>` : '';
+    prevBtn.innerHTML = `<span class="yt-nav-icon">◀</span> Prev ${positionText}`;
+    nextBtn.innerHTML = `Next <span class="yt-nav-icon">▶</span> ${positionText}`;
+  }
+}
+
+// Keyboard navigation for highlights
+document.addEventListener('keydown', (e) => {
+  // Only handle if there are highlights and user is not in an input
+  if (highlightElements.length === 0) return;
+  
+  const tag = document.activeElement.tagName.toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || document.activeElement.isContentEditable) return;
+  
+  // Arrow keys for navigation
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    navigateToHighlight(currentHighlightIndex + 1);
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    navigateToHighlight(currentHighlightIndex - 1);
+  } else if (e.key === 'Escape') {
+    // Clear highlights on Escape
+    removeHighlights();
+    removeHighlightUI();
+  }
+});
 
 // Escape special regex characters
 function escapeRegExp(string) {

@@ -756,6 +756,7 @@ function debounce(func, wait) {
   };
 }
 
+
 class YouTabsCore {
   // Static filter type definitions
   static FILTER_TYPES = [
@@ -949,6 +950,10 @@ class YouTabsCore {
       indexExpirationMinutes: 0,
       // Index character limit
       maxIndexChars: 250,
+      // Performance settings
+      indexThrottleMs: 1000,
+      maxIndexedPages: 1000,
+      lazyLoadGroups: false,
       enableGrouping: true,
       groupingType: 'custom',
       collapsedGroups: [],
@@ -1019,6 +1024,19 @@ class YouTabsCore {
     // Modal element
     this.modal = null;
     this.modalResolve = null;
+    
+    // Throttling for indexing operations
+    this._lastIndexTime = 0;
+    this._indexQueue = [];
+    this._isIndexing = false;
+    
+    // Lazy loading state
+    this._loadedGroups = new Set(); // Track which groups have been loaded
+    
+    // Web Worker for indexing
+    this._indexWorker = null;
+    this._workerAvailable = true; // Flag to track if worker is available
+    this._initIndexWorker();
   }
   
   async init() {
@@ -1074,6 +1092,37 @@ class YouTabsCore {
     return (days * msPerDay) + (hours * msPerHour) + (minutes * msPerMinute);
   }
   
+  // Initialize the web worker for background indexing
+  _initIndexWorker() {
+    try {
+      this._indexWorker = new Worker('indexer-worker.js');
+      
+      this._indexWorker.onmessage = (e) => {
+        const { type, headings, count, error } = e.data;
+        
+        if (type === 'headingsExtracted') {
+          console.log('Worker: extracted', count, 'headings');
+        } else if (type === 'batchProcessed') {
+          console.log('Worker: batch processed');
+        } else if (type === 'error') {
+          console.error('Worker error:', error);
+        }
+      };
+      
+      this._indexWorker.onerror = (error) => {
+        console.error('Index Worker error:', error);
+        this._workerAvailable = false;
+        console.warn('YouTabs: Web Worker unavailable, using synchronous indexing');
+      };
+      
+      console.log('Index Worker initialized');
+    } catch (error) {
+      console.error('Failed to initialize index worker:', error);
+      this._workerAvailable = false;
+      console.warn('YouTabs: Web Worker unavailable, using synchronous indexing');
+    }
+  }
+  
   // Clean up expired page headings from IndexedDB
   async cleanupExpiredPageHeadings() {
     try {
@@ -1081,6 +1130,11 @@ class YouTabsCore {
         const expirationMs = this.getIndexExpirationMs();
         await window.YouTabsDB.cleanupExpiredPagesIndex(expirationMs);
         console.log(`Page headings cleanup completed. Expiration: ${expirationMs}ms (${this.settings?.indexExpirationDays ?? 3} days)`);
+        
+        // Also cleanup by max pages limit
+        const maxPages = this.settings?.maxIndexedPages || 1000;
+        await window.YouTabsDB.cleanupMaxPages(maxPages);
+        console.log(`Max pages cleanup completed. Max: ${maxPages}`);
       }
     } catch (error) {
       console.error('Error cleaning up expired page headings:', error);
@@ -4881,6 +4935,18 @@ class YouTabsCore {
   // Only indexes if: page URL is not in index OR 30 minutes have passed since last index
   async indexPageHeadings(tabId) {
     console.log('indexPageHeadings: called for tab', tabId);
+    
+    // Apply throttling based on settings
+    const throttleMs = this.settings?.indexThrottleMs || 1000;
+    const now = Date.now();
+    if (now - this._lastIndexTime < throttleMs) {
+      console.log('indexPageHeadings: throttled, waiting', throttleMs - (now - this._lastIndexTime), 'ms');
+      // Queue the indexing for later
+      this._indexQueue.push({ tabId, timestamp: now + throttleMs });
+      return;
+    }
+    this._lastIndexTime = now;
+    
     try {
       // Get the tab to check its URL
       const tab = await browser.tabs.get(tabId);
@@ -4954,6 +5020,109 @@ class YouTabsCore {
     } catch (error) {
       // Log errors for debugging
       console.error('indexPageHeadings: error for', tab?.url, error.message);
+    }
+    
+    // Process queued indexing operations
+    this._processIndexQueue();
+  }
+  
+  // Process queued indexing operations
+  async _processIndexQueue() {
+    // Don't process if already running, queue is empty, or worker unavailable
+    if (this._isIndexing || this._indexQueue.length === 0) {
+      return;
+    }
+    
+    // Prevent queue from growing indefinitely - drop oldest if too large
+    const MAX_QUEUE_SIZE = 50;
+    if (this._indexQueue.length > MAX_QUEUE_SIZE) {
+      console.warn('_processIndexQueue: Queue too large, trimming from', this._indexQueue.length);
+      this._indexQueue = this._indexQueue.slice(-MAX_QUEUE_SIZE);
+    }
+    
+    this._isIndexing = true;
+    const throttleMs = this.settings?.indexThrottleMs || 1000;
+    
+    try {
+      while (this._indexQueue.length > 0) {
+        const now = Date.now();
+        const nextItem = this._indexQueue[0];
+        
+        if (nextItem.timestamp <= now) {
+          this._indexQueue.shift();
+          this._lastIndexTime = Date.now();
+          
+          try {
+            await this._indexSinglePage(nextItem.tabId);
+          } catch (e) {
+            console.error('_processIndexQueue: error indexing tab', nextItem.tabId, e.message);
+          }
+          
+          // Wait throttle delay between items
+          await new Promise(resolve => setTimeout(resolve, throttleMs));
+        } else {
+          // Wait until next item is ready
+          await new Promise(resolve => setTimeout(resolve, Math.min(nextItem.timestamp - now, throttleMs)));
+        }
+      }
+    } finally {
+      this._isIndexing = false;
+    }
+  }
+  
+  // Internal method to index a single page
+  async _indexSinglePage(tabId) {
+    // This reuses most of the indexPageHeadings logic
+    // but without the throttle check
+    try {
+      const tab = await browser.tabs.get(tabId);
+      if (!tab || !tab.url) return;
+      
+      // Skip unsupported URLs
+      if (tab.url.startsWith('about:') || 
+          tab.url.startsWith('chrome:') ||
+          tab.url.startsWith('moz-extension:') ||
+          tab.url.startsWith('file:') ||
+          tab.url.startsWith('javascript:') ||
+          tab.url.startsWith('data:') ||
+          tab.url.startsWith('blob:')) {
+        return;
+      }
+      
+      const shouldIndex = await this.shouldReindexPageByUrl(tab.url);
+      if (!shouldIndex) return;
+      
+      let headings = null;
+      const contentScriptHeadings = await this.extractHeadingsViaContentScript(tabId);
+      
+      if (contentScriptHeadings && contentScriptHeadings.length > 0) {
+        headings = contentScriptHeadings;
+      } else {
+        const maxChars = this.settings?.maxIndexChars || 250;
+        try {
+          const results = await browser.scripting.executeScript({
+            target: { tabId: tabId },
+            world: 'MAIN',
+            func: extractHeadings,
+            args: [{ maxIndexChars: maxChars }]
+          });
+          if (results && results[0] && results[0].result) {
+            headings = results[0].result;
+          }
+        } catch (scriptError) {
+          console.error('_indexSinglePage: scripting error:', scriptError.message);
+        }
+      }
+      
+      if (headings && headings.length > 0) {
+        headings = this.filterDuplicateHeadings(headings);
+        const urlKey = this.getUrlKey(tab.url);
+        this.pageHeadings[urlKey] = headings;
+        await window.YouTabsDB.savePageHeadingsByUrl(tab.url, tabId, headings);
+        console.log('_indexSinglePage: saved', headings.length, 'headings for', urlKey);
+      }
+    } catch (error) {
+      console.error('_indexSinglePage: error for tab', tabId, error.message);
     }
   }
   

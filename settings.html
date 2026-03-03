@@ -201,6 +201,14 @@
 
       <div class="settings-item">
         <div>
+          <div class="settings-label">Search results panel</div>
+          <div class="settings-description">Show navigation panel on page when searching</div>
+        </div>
+        <div class="toggle-switch" id="showSearchPanel" data-setting="showSearchPanel"></div>
+      </div>
+
+      <div class="settings-item">
+        <div>
           <div class="settings-label">Max search results</div>
           <div class="settings-description">Maximum results to display per search</div>
         </div>
@@ -228,6 +236,30 @@
           <div class="settings-description">Number of characters to index from each page element</div>
         </div>
         <input type="number" id="maxIndexChars" class="index-setting-input" data-setting="maxIndexChars" min="50" max="1000" value="250">
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Index throttle</div>
+          <div class="settings-description">Delay between indexing operations (ms)</div>
+        </div>
+        <input type="number" id="indexThrottleMs" class="index-setting-input" data-setting="indexThrottleMs" min="100" max="10000" value="1000">
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Max indexed pages</div>
+          <div class="settings-description">Maximum pages to keep in index</div>
+        </div>
+        <input type="number" id="maxIndexedPages" class="index-setting-input" data-setting="maxIndexedPages" min="100" max="10000" value="1000">
+      </div>
+
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">Lazy loading</div>
+          <div class="settings-description">Load group content on demand</div>
+        </div>
+        <div class="toggle-switch" id="lazyLoadGroups" data-setting="lazyLoadGroups"></div>
       </div>
     </div>
     

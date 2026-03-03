@@ -542,6 +542,78 @@ async function cleanupExpiredPagesIndex(expirationMs = 259200000) {
 }
 
 /**
+ * Clean up oldest pagesIndex entries when exceeding max limit
+ * @param {number} maxPages - Maximum number of pages to keep (default: 1000)
+ * @returns {Promise<number>} - Returns number of deleted entries
+ */
+async function cleanupMaxPages(maxPages = 1000) {
+  try {
+    const db = await openDatabase();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_PAGES_INDEX], 'readwrite');
+      const store = transaction.objectStore(STORE_PAGES_INDEX);
+      
+      // Get all entries ordered by indexedAt (oldest first)
+      const index = store.index('indexedAt');
+      const request = index.openCursor(null, 'next');
+      
+      let totalCount = 0;
+      let deleted = 0;
+      let entriesChecked = 0;
+      const urlsToDelete = [];
+      
+      // First pass: count total and collect URLs to delete
+      const countRequest = index.getAll();
+      countRequest.onsuccess = () => {
+        const allEntries = countRequest.result;
+        totalCount = allEntries.length;
+        
+        if (totalCount <= maxPages) {
+          console.log(`IndexedDB: ${totalCount} pages, within limit of ${maxPages}`);
+          resolve(0);
+          return;
+        }
+        
+        // Collect URLs of oldest entries to delete
+        const deleteCount = totalCount - maxPages;
+        const toDelete = allEntries.slice(0, deleteCount);
+        urlsToDelete.push(...toDelete.map(e => e.url));
+        
+        // Second pass: delete collected URLs
+        if (urlsToDelete.length > 0) {
+          let deleteCompleted = 0;
+          
+          urlsToDelete.forEach(url => {
+            const deleteReq = store.delete(url);
+            deleteReq.onsuccess = () => {
+              deleted++;
+              deleteCompleted++;
+            };
+            deleteReq.onerror = () => {
+              deleteCompleted++; // Count even failed deletes as processed
+            };
+          });
+        }
+      };
+      
+      transaction.oncomplete = () => {
+        console.log(`IndexedDB: Cleanup complete. Deleted ${deleted} oldest entries. Remaining: ${totalCount - deleted}`);
+        resolve(deleted);
+      };
+      
+      transaction.onerror = () => {
+        console.error('IndexedDB: Error during max pages cleanup', transaction.error);
+        reject(transaction.error);
+      };
+    });
+  } catch (error) {
+    console.error('IndexedDB: Error cleaning up max pages', error);
+    return 0;
+  }
+}
+
+/**
  * Migrate data from localStorage to IndexedDB
  * @returns {Promise<boolean>} - Returns true if migration was performed
  */
@@ -642,6 +714,7 @@ if (typeof window !== 'undefined') {
     deletePagesIndexByTabId,
     deletePagesIndexByUrl,
     cleanupExpiredPagesIndex,
+    cleanupMaxPages,
     migrateFromLocalStorage,
     migrateFromYouTabsHeadings,
     isIndexedDBAvailable
