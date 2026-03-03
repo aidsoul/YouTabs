@@ -7,9 +7,6 @@
 const POPUP_MAX_WIDTH = 450;
 const POPUP_MARGIN = 50;
 
-// Store reference to the popup window
-let popupWindowId = null;
-
 // Handle toolbar button click to toggle sidebar
 browser.action.onClicked.addListener(async () => {
   try {

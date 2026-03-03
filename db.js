@@ -44,7 +44,10 @@ function openDatabase() {
       
       // Create customGroups store
       if (!db.objectStoreNames.contains(STORE_CUSTOM_GROUPS)) {
-        db.createObjectStore(STORE_CUSTOM_GROUPS, { keyPath: 'id' });
+        const customGroupsStore = db.createObjectStore(STORE_CUSTOM_GROUPS, { keyPath: 'id' });
+        // Add indexes for frequently queried fields
+        customGroupsStore.createIndex('name', 'name', { unique: false });
+        customGroupsStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
       
       // Create groupTabMetadata store
