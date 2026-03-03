@@ -93,33 +93,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true; // Keep channel open for async response
     }
   }
-  
-  // Handle updating the entire page index
-  if (message.action === 'updateIndex') {
-    const pageUrl = message.url;
-    
-    if (!pageUrl) {
-      sendResponse({ success: false, error: 'No URL provided' });
-      return true;
-    }
-    
-    try {
-      new URL(pageUrl);
-    } catch (e) {
-      sendResponse({ success: false, error: 'Invalid URL' });
-      return true;
-    }
-    
-    // Extract all headings from the page
-    const headings = extractPageHeadings();
-    
-    // Save to IndexedDB
-    updatePageIndex(pageUrl, headings).then(result => {
-      sendResponse(result);
-    });
-    return true; // Keep channel open for async response
-  }
-  
+
   return true; // Keep the message channel open for async response
 });
 
@@ -1179,57 +1153,19 @@ async function addSelectedTextToIndex(text, pageUrl) {
     // Get URL key for indexing
     const urlKey = getUrlKey(pageUrl);
     
-    // Try to use YouTabsDB if available
-    if (window.YouTabsDB) {
-      const pageIndex = await window.YouTabsDB.getPagesIndexByUrl(urlKey);
-      
-      let headings = [];
-      if (pageIndex && pageIndex.headings) {
-        headings = pageIndex.headings;
-      }
-      
-      // Add the selected text as a custom heading
-      const customHeading = {
-        id: 'custom-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-        text: text,
-        level: 0, // 0 indicates custom indexed text
-        isCustom: true
-      };
-      
-      headings.push(customHeading);
-      await window.YouTabsDB.savePageHeadingsByUrl(pageUrl, null, headings);
-      
-      return { success: true, message: 'Text added to indexing' };
-    }
-    
-    // Fallback: use local storage
-    const storageKey = 'pagesIndex_' + urlKey;
-    const stored = await browser.storage.local.get(storageKey);
-    let headings = [];
-    
-    if (stored[storageKey] && stored[storageKey].headings) {
-      headings = stored[storageKey].headings;
-    }
-    
-    // Add the selected text as a custom heading
-    const customHeading = {
-      id: 'custom-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-      text: text,
-      level: 0, // 0 indicates custom indexed text
-      isCustom: true
-    };
-    
-    headings.push(customHeading);
-    
-    await browser.storage.local.set({
-      [storageKey]: {
-        url: pageUrl,
-        headings: headings,
-        indexedAt: Date.now()
-      }
+    // Send to background script for IndexedDB storage
+    const response = await browser.runtime.sendMessage({
+      action: 'addTextToIndex',
+      url: pageUrl,
+      urlKey: urlKey,
+      text: text
     });
     
-    return { success: true, message: 'Text added to indexing' };
+    if (response && response.success) {
+      return { success: true, message: 'Text added to indexing' };
+    } else {
+      return { success: false, error: response?.error || 'Failed to add text to indexing' };
+    }
   } catch (error) {
     console.error('Error adding to indexing:', error);
     return { success: false, error: error.message };
@@ -1242,33 +1178,23 @@ async function updatePageIndex(pageUrl, headings) {
     // Get URL key for indexing
     const urlKey = getUrlKey(pageUrl);
     
-    // Try to use YouTabsDB if available
-    if (window.YouTabsDB) {
-      await window.YouTabsDB.savePageHeadingsByUrl(pageUrl, null, headings);
-      
+    // Send to background script for IndexedDB storage
+    const response = await browser.runtime.sendMessage({
+      action: 'updatePageIndexInDB',
+      url: pageUrl,
+      urlKey: urlKey,
+      headings: headings
+    });
+    
+    if (response && response.success) {
       return { 
         success: true, 
         message: 'Index updated successfully',
         count: headings.length
       };
+    } else {
+      return { success: false, error: response?.error || 'Failed to update index' };
     }
-    
-    // Fallback: use local storage
-    const storageKey = 'pagesIndex_' + urlKey;
-    
-    await browser.storage.local.set({
-      [storageKey]: {
-        url: pageUrl,
-        headings: headings,
-        indexedAt: Date.now()
-      }
-    });
-    
-    return { 
-      success: true, 
-      message: 'Index updated successfully',
-      count: headings.length
-    };
   } catch (error) {
     console.error('Error updating index:', error);
     return { success: false, error: error.message };

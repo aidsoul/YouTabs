@@ -1724,27 +1724,6 @@ class YouTabsCore {
       indexedInfo.style.pointerEvents = 'none';
       menu.appendChild(indexedInfo);
       
-      // Update index option
-      const updateIndexItem = document.createElement('div');
-      updateIndexItem.className = 'context-menu-item';
-      updateIndexItem.textContent = 'Update index';
-      updateIndexItem.addEventListener('click', async () => {
-        const tab = this.tabs.find(t => t.id === Number(tabId));
-        if (tab && tab.url) {
-          // Send message to background script to handle the update
-          try {
-            await browser.runtime.sendMessage({
-              action: 'updatePageIndex',
-              tabId: tab.id
-            });
-          } catch (error) {
-            console.error('Error sending message to background:', error);
-          }
-        }
-        this.hideContextMenu();
-      });
-      menu.appendChild(updateIndexItem);
-      
       // Remove index option
       const removeIndexItem = document.createElement('div');
       removeIndexItem.className = 'context-menu-item';
