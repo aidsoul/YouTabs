@@ -6,268 +6,764 @@
   <title>Settings - YouTabs</title>
   <link rel="stylesheet" href="styles.css">
   <style>
+    /* Settings Page Specific Styles */
     body {
       padding: 0;
       overflow: auto;
+      background: var(--bg-active);
     }
-    .settings-container {
-      padding: 20px;
-      max-width: 600px;
-      margin: 0 auto;
+    
+    /* Main Layout */
+    .settings-layout {
+      display: flex;
+      min-height: 100vh;
     }
-    .settings-title {
+    
+    /* Sidebar */
+    .settings-sidebar {
+      width: 240px;
+      background: #f8f9fa;
+      border-right: 1px solid var(--border-color);
+      padding: 20px 0;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .settings-sidebar-header {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 16px;
+    }
+    
+    .settings-sidebar-title {
       font-size: 20px;
       font-weight: 600;
-      margin-bottom: 24px;
       color: var(--text-primary);
     }
-    .settings-section {
+    
+    /* Search Box */
+    .settings-search-container {
+      padding: 0 16px;
+      margin-bottom: 16px;
+    }
+    
+    .settings-search {
+      position: relative;
+    }
+    
+    .settings-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+      pointer-events: none;
+    }
+    
+    .settings-search input {
+      width: 100%;
+      padding: 10px 12px 10px 36px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      font-size: 13px;
+      transition: all 0.2s ease;
+    }
+    
+    .settings-search input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 3px rgba(73, 230, 11, 0.15);
+    }
+    
+    .settings-search input::placeholder {
+      color: var(--text-secondary);
+    }
+    
+    /* Category Navigation */
+    .settings-nav {
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    .settings-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border-left: 3px solid transparent;
+      font-size: 14px;
+    }
+    
+    .settings-nav-item:hover {
+      background: rgba(73, 230, 11, 0.08);
+      color: var(--text-primary);
+    }
+    
+    .settings-nav-item.active {
+      background: rgba(73, 230, 11, 0.12);
+      color: var(--accent-color);
+      border-left-color: var(--accent-color);
+      font-weight: 500;
+    }
+    
+    .settings-nav-item svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    
+    .settings-nav-item .nav-count {
+      margin-left: auto;
+      background: var(--bg-inactive);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    
+    /* Main Content */
+    .settings-main {
+      flex: 1;
+      padding: 24px 32px;
+      overflow-y: auto;
+    }
+    
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 24px;
     }
-    .settings-section-title {
-      font-size: 14px;
+    
+    .settings-page-title {
+      font-size: 24px;
       font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      color: var(--text-primary);
     }
+    
+    .settings-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+    
+    /* Category Sections */
+    .settings-category {
+      display: none;
+    }
+    
+    .settings-category.active {
+      display: block;
+      animation: fadeIn 0.2s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .settings-section {
+      background: var(--bg-active);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .settings-section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .settings-section-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, rgba(73, 230, 11, 0.15) 0%, rgba(59, 199, 11, 0.1) 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-color);
+    }
+    
+    .settings-section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .settings-section-description {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    
+    /* Settings Items */
     .settings-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 0;
+      padding: 14px 0;
       border-bottom: 1px solid var(--border-color);
+      transition: background 0.15s ease;
     }
+    
     .settings-item:last-child {
       border-bottom: none;
+      padding-bottom: 0;
     }
-    .settings-item.disabled {
-      opacity: 0.5;
-      pointer-events: none;
+    
+    .settings-item:first-child {
+      padding-top: 0;
     }
-    .settings-item.disabled .settings-label,
-    .settings-item.disabled .settings-description {
-      opacity: 0.5;
+    
+    .settings-item:hover {
+      margin: 0 -8px;
+      padding-left: 8px;
+      padding-right: 8px;
+      background: rgba(73, 230, 11, 0.04);
+      border-radius: 8px;
     }
+    
+    .settings-item.highlighted {
+      background: rgba(73, 230, 11, 0.08);
+      margin: 0 -8px;
+      padding-left: 8px;
+      padding-right: 8px;
+      border-radius: 8px;
+      animation: pulse 0.3s ease;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { background: rgba(73, 230, 11, 0.08); }
+      50% { background: rgba(73, 230, 11, 0.15); }
+    }
+    
+    .settings-item.hidden {
+      display: none;
+    }
+    
+    .settings-item-content {
+      flex: 1;
+      min-width: 0;
+      padding-right: 16px;
+    }
+    
     .settings-label {
       font-size: 14px;
+      font-weight: 500;
       color: var(--text-primary);
+      margin-bottom: 3px;
     }
+    
     .settings-description {
       font-size: 12px;
       color: var(--text-secondary);
-      margin-top: 4px;
+      line-height: 1.4;
     }
+    
+    /* Toggle Switch */
     .toggle-switch {
       position: relative;
-      width: 44px;
-      height: 24px;
+      width: 48px;
+      height: 26px;
       background: var(--bg-inactive);
-      border-radius: 12px;
+      border-radius: 13px;
       cursor: pointer;
-      transition: background 150ms ease;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
     }
+    
+    .toggle-switch:hover {
+      background: #d8dde2;
+    }
+    
     .toggle-switch.active {
       background: var(--accent-color);
     }
+    
     .toggle-switch::after {
       content: '';
       position: absolute;
-      top: 2px;
-      left: 2px;
+      top: 3px;
+      left: 3px;
       width: 20px;
       height: 20px;
       background: white;
       border-radius: 50%;
-      transition: transform 150ms ease;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
     }
+    
     .toggle-switch.active::after {
-      transform: translateX(20px);
+      transform: translateX(22px);
     }
-    .version-info {
-      text-align: center;
-      padding: 20px;
-      color: var(--text-secondary);
-      font-size: 12px;
-    }
-    .grouping-select {
-      padding: 8px 12px;
+    
+    /* Input Fields */
+    .settings-input {
+      padding: 10px 14px;
       border: 1px solid var(--border-color);
-      border-radius: 6px;
+      border-radius: 8px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      font-size: 14px;
+      min-width: 100px;
+      transition: all 0.2s ease;
+    }
+    
+    .settings-input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 3px rgba(73, 230, 11, 0.15);
+    }
+    
+    .settings-input-small {
+      width: 80px;
+      text-align: center;
+    }
+    
+    /* Select */
+    .settings-select {
+      padding: 10px 32px 10px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
       background: var(--bg-active);
       color: var(--text-primary);
       font-size: 14px;
       cursor: pointer;
-      min-width: 150px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7c93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      min-width: 140px;
+      transition: all 0.2s ease;
     }
-    .grouping-select:focus {
+    
+    .settings-select:focus {
       outline: none;
       border-color: var(--accent-color);
+      box-shadow: 0 0 0 3px rgba(73, 230, 11, 0.15);
     }
-    .max-results-input {
-      padding: 8px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      background: var(--bg-active);
-      color: var(--text-primary);
-      font-size: 14px;
-      width: 70px;
-      text-align: center;
-    }
-    .max-results-input:focus {
-      outline: none;
-      border-color: var(--accent-color);
-    }
-    .index-setting-input {
-      padding: 8px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      background: var(--bg-active);
-      color: var(--text-primary);
-      font-size: 14px;
-      width: 80px;
-      text-align: center;
-    }
-    .index-setting-input:focus {
-      outline: none;
-      border-color: var(--accent-color);
-    }
-    .index-expiration-inputs {
+    
+    /* Input Group */
+    .settings-input-group {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 8px;
     }
-    .index-expiration-inputs .index-setting-input {
-      width: 80px;
+    
+    .settings-input-group .input-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
     }
-    .index-expiration-inputs .input-label {
+    
+    /* Disabled State */
+    .settings-item.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    
+    .settings-item.disabled .settings-label,
+    .settings-item.disabled .settings-description {
+      opacity: 0.5;
+    }
+    
+    /* No Results */
+    .no-results {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-secondary);
+    }
+    
+    .no-results-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      color: var(--text-secondary);
+      opacity: 0.5;
+    }
+    
+    .no-results-title {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    
+    .no-results-text {
+      font-size: 14px;
+    }
+    
+    /* Version Info */
+    .settings-footer {
+      margin-top: auto;
+      padding: 20px;
+      border-top: 1px solid var(--border-color);
+      text-align: center;
+    }
+    
+    .version-info {
       font-size: 12px;
       color: var(--text-secondary);
+    }
+    
+    .version-info a {
+      color: var(--accent-color);
+      text-decoration: none;
+    }
+    
+    .version-info a:hover {
+      text-decoration: underline;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .settings-layout {
+        flex-direction: column;
+      }
+      
+      .settings-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 16px 0;
+      }
+      
+      .settings-sidebar-header {
+        padding: 0 16px 16px;
+      }
+      
+      .settings-nav {
+        display: flex;
+        overflow-x: auto;
+        padding: 0 8px;
+      }
+      
+      .settings-nav-item {
+        padding: 10px 16px;
+        border-left: none;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+      
+      .settings-nav-item.active {
+        border-left: none;
+        border-bottom-color: var(--accent-color);
+      }
+      
+      .settings-main {
+        padding: 20px 16px;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="settings-container">
-    <div class="settings-title">Settings</div>
+  <div class="settings-layout">
+    <!-- Sidebar -->
+    <aside class="settings-sidebar">
+      <div class="settings-sidebar-header">
+        <div class="settings-sidebar-title">Settings</div>
+      </div>
+      
+      <!-- Search -->
+      <div class="settings-search-container">
+        <div class="settings-search">
+          <svg class="settings-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          <input type="text" id="settingsSearch" placeholder="Search settings...">
+        </div>
+      </div>
+      
+      <!-- Navigation -->
+      <nav class="settings-nav">
+        <div class="settings-nav-item active" data-category="general">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>General</span>
+          <span class="nav-count">3</span>
+        </div>
+        
+        <div class="settings-nav-item" data-category="behavior">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span>Behavior</span>
+          <span class="nav-count">6</span>
+        </div>
+        
+        <div class="settings-nav-item" data-category="indexing">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <line x1="10" y1="9" x2="8" y2="9"></line>
+          </svg>
+          <span>Indexing</span>
+          <span class="nav-count">6</span>
+        </div>
+      </nav>
+      
+      <!-- Footer -->
+      <div class="settings-footer">
+        <div class="version-info">
+          YouTabs v1.0.0<br>
+          <a href="https://github.com/aidsoul/youtabs" target="_blank">GitHub</a>
+        </div>
+      </div>
+    </aside>
     
-    <div class="settings-section">
-      <div class="settings-section-title">General</div>
+    <!-- Main Content -->
+    <main class="settings-main">
+      <!-- General Category -->
+      <div class="settings-category active" id="category-general">
+        <div class="settings-header">
+          <div>
+            <div class="settings-page-title">General</div>
+            <div class="settings-subtitle">Basic display and appearance settings</div>
+          </div>
+        </div>
+        
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <div class="settings-section-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            </div>
+            <div>
+              <div class="settings-section-title">Display</div>
+              <div class="settings-section-description">Configure how tabs are displayed</div>
+            </div>
+          </div>
+          
+          <div class="settings-item" data-keywords="favicon icon website show">
+            <div class="settings-item-content">
+              <div class="settings-label">Show favicon</div>
+              <div class="settings-description">Display website icons next to tab titles</div>
+            </div>
+            <div class="toggle-switch active" id="showFavicon" data-setting="showFavicon"></div>
+          </div>
+          
+          <div class="settings-item" data-keywords="audio sound playing icon">
+            <div class="settings-item-content">
+              <div class="settings-label">Tab sound</div>
+              <div class="settings-description">Show Playing icon for tabs with audio</div>
+            </div>
+            <div class="toggle-switch active" id="showAudio" data-setting="showAudio"></div>
+          </div>
+          
+          <div class="settings-item" data-keywords="action buttons panel left">
+            <div class="settings-item-content">
+              <div class="settings-label">Action buttons panel</div>
+              <div class="settings-description">Show action buttons on left side of tabs</div>
+            </div>
+            <div class="toggle-switch" id="enableActionButtonsLeft" data-setting="enableActionButtonsLeft"></div>
+          </div>
+        </div>
+      </div>
       
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Show favicon</div>
-          <div class="settings-description">Display website icons</div>
+      <!-- Behavior Category -->
+      <div class="settings-category" id="category-behavior">
+        <div class="settings-header">
+          <div>
+            <div class="settings-page-title">Behavior</div>
+            <div class="settings-subtitle">How the extension interacts with your browsing</div>
+          </div>
         </div>
-        <div class="toggle-switch active" id="showFavicon" data-setting="showFavicon"></div>
+        
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <div class="settings-section-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <div>
+              <div class="settings-section-title">Tab Selection</div>
+              <div class="settings-section-description">Settings for selecting and switching tabs</div>
+            </div>
+          </div>
+          
+          <div class="settings-item" data-keywords="close popup select after">
+            <div class="settings-item-content">
+              <div class="settings-label">Close popup after selection</div>
+              <div class="settings-description">Automatically close popup when selecting a tab</div>
+            </div>
+            <div class="toggle-switch active" id="closeOnSelect" data-setting="closeOnSelect"></div>
+          </div>
+          
+          <div class="settings-item" data-keywords="lazy loading groups demand">
+            <div class="settings-item-content">
+              <div class="settings-label">Lazy loading</div>
+              <div class="settings-description">Load group content on demand to improve performance</div>
+            </div>
+            <div class="toggle-switch" id="lazyLoadGroups" data-setting="lazyLoadGroups"></div>
+          </div>
+        </div>
+        
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <div class="settings-section-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="settings-section-title">Search</div>
+              <div class="settings-section-description">Configure search behavior</div>
+            </div>
+          </div>
+          
+          <div class="settings-item" data-keywords="page search content index">
+            <div class="settings-item-content">
+              <div class="settings-label">Page content search</div>
+              <div class="settings-description">Index and search page content</div>
+            </div>
+            <div class="toggle-switch active" id="enablePageSearch" data-setting="enablePageSearch"></div>
+          </div>
+          
+          <div class="settings-item" data-keywords="search panel navigation page">
+            <div class="settings-item-content">
+              <div class="settings-label">Search results panel</div>
+              <div class="settings-description">Show navigation panel on page when searching</div>
+            </div>
+            <div class="toggle-switch" id="showSearchPanel" data-setting="showSearchPanel"></div>
+          </div>
+          
+          <div class="settings-item" data-keywords="max search results limit">
+            <div class="settings-item-content">
+              <div class="settings-label">Max search results</div>
+              <div class="settings-description">Maximum number of results to display per search</div>
+            </div>
+            <input type="number" id="maxSearchResults" class="settings-input settings-input-small" data-setting="maxSearchResults" min="5" max="50" value="15">
+          </div>
+        </div>
       </div>
       
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Action buttons panel</div>
-          <div class="settings-description">Show action buttons on left side</div>
+      <!-- Indexing Category -->
+      <div class="settings-category" id="category-indexing">
+        <div class="settings-header">
+          <div>
+            <div class="settings-page-title">Indexing</div>
+            <div class="settings-subtitle">Configure how page content is indexed</div>
+          </div>
         </div>
-        <div class="toggle-switch" id="enableActionButtonsLeft" data-setting="enableActionButtonsLeft"></div>
+        
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <div class="settings-section-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </div>
+            <div>
+              <div class="settings-section-title">Data Expiration</div>
+              <div class="settings-section-description">Control when indexed data is removed</div>
+            </div>
+          </div>
+          
+          <div class="settings-item" data-keywords="index expiration time delete cleanup days hours minutes">
+            <div class="settings-item-content">
+              <div class="settings-label">Index expiration time</div>
+              <div class="settings-description">Time before indexed data is automatically deleted</div>
+            </div>
+            <div class="settings-input-group">
+              <input type="number" id="indexExpirationDays" class="settings-input settings-input-small" data-setting="indexExpirationDays" min="0" max="365" value="3">
+              <span class="input-label">days</span>
+              <input type="number" id="indexExpirationHours" class="settings-input settings-input-small" data-setting="indexExpirationHours" min="0" max="23" value="0">
+              <span class="input-label">hours</span>
+              <input type="number" id="indexExpirationMinutes" class="settings-input settings-input-small" data-setting="indexExpirationMinutes" min="0" max="59" value="0">
+              <span class="input-label">min</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <div class="settings-section-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="settings-section-title">Indexing Limits</div>
+              <div class="settings-section-description">Configure indexing resource limits</div>
+            </div>
+          </div>
+          
+          <div class="settings-item" data-keywords="max characters index">
+            <div class="settings-item-content">
+              <div class="settings-label">Max characters per indexed item</div>
+              <div class="settings-description">Number of characters to index from each page element</div>
+            </div>
+            <input type="number" id="maxIndexChars" class="settings-input settings-input-small" data-setting="maxIndexChars" min="50" max="1000" value="250">
+          </div>
+          
+          <div class="settings-item" data-keywords="index throttle delay performance">
+            <div class="settings-item-content">
+              <div class="settings-label">Index throttle</div>
+              <div class="settings-description">Delay between indexing operations (milliseconds)</div>
+            </div>
+            <div class="settings-input-group">
+              <input type="number" id="indexThrottleMs" class="settings-input settings-input-small" data-setting="indexThrottleMs" min="100" max="10000" value="1000">
+              <span class="input-label">ms</span>
+            </div>
+          </div>
+          
+          <div class="settings-item" data-keywords="max indexed pages limit">
+            <div class="settings-item-content">
+              <div class="settings-label">Max indexed pages</div>
+              <div class="settings-description">Maximum number of pages to keep in index</div>
+            </div>
+            <input type="number" id="maxIndexedPages" class="settings-input settings-input-small" data-setting="maxIndexedPages" min="100" max="10000" value="1000">
+          </div>
+        </div>
       </div>
       
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Tab sound</div>
-          <div class="settings-description">Show Playing icon</div>
+      <!-- Search Results Category -->
+      <div class="settings-category" id="category-search">
+        <div class="settings-header">
+          <div>
+            <div class="settings-page-title">Search Results</div>
+            <div class="settings-subtitle" id="searchQueryText"></div>
+          </div>
         </div>
-        <div class="toggle-switch active" id="showAudio" data-setting="showAudio"></div>
-      </div>
-    </div>
-    
-    <div class="settings-section">
-      <div class="settings-section-title">Behavior</div>
-      
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Close popup</div>
-          <div class="settings-description">After selecting a tab</div>
+        
+        <div class="settings-section" id="searchResultsContainer">
+          <!-- Settings items will be shown here dynamically -->
         </div>
-        <div class="toggle-switch active" id="closeOnSelect" data-setting="closeOnSelect"></div>
-      </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Page content search</div>
-          <div class="settings-description">Index and search page</div>
-        </div>
-        <div class="toggle-switch active" id="enablePageSearch" data-setting="enablePageSearch"></div>
-      </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Search results panel</div>
-          <div class="settings-description">Show navigation panel on page when searching</div>
-        </div>
-        <div class="toggle-switch" id="showSearchPanel" data-setting="showSearchPanel"></div>
-      </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Max search results</div>
-          <div class="settings-description">Maximum results to display per search</div>
-        </div>
-        <input type="number" id="maxSearchResults" class="max-results-input" data-setting="maxSearchResults" min="5" max="50" value="15">
-      </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Index expiration time</div>
-          <div class="settings-description">Time before indexed data is deleted</div>
-        </div>
-        <div class="index-expiration-inputs">
-          <input type="number" id="indexExpirationDays" class="index-setting-input" data-setting="indexExpirationDays" min="0" max="365" value="3">
-          <span class="input-label">days</span>
-          <input type="number" id="indexExpirationHours" class="index-setting-input" data-setting="indexExpirationHours" min="0" max="23" value="0">
-          <span class="input-label">hours</span>
-          <input type="number" id="indexExpirationMinutes" class="index-setting-input" data-setting="indexExpirationMinutes" min="0" max="59" value="0">
-          <span class="input-label">min</span>
+        
+        <div class="no-results" id="noResultsMessage" style="display: none;">
+          <svg class="no-results-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          <div class="no-results-title">No settings found</div>
+          <div class="no-results-text">Try adjusting your search terms</div>
         </div>
       </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Max characters per indexed item</div>
-          <div class="settings-description">Number of characters to index from each page element</div>
-        </div>
-        <input type="number" id="maxIndexChars" class="index-setting-input" data-setting="maxIndexChars" min="50" max="1000" value="250">
-      </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Index throttle</div>
-          <div class="settings-description">Delay between indexing operations (ms)</div>
-        </div>
-        <input type="number" id="indexThrottleMs" class="index-setting-input" data-setting="indexThrottleMs" min="100" max="10000" value="1000">
-      </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Max indexed pages</div>
-          <div class="settings-description">Maximum pages to keep in index</div>
-        </div>
-        <input type="number" id="maxIndexedPages" class="index-setting-input" data-setting="maxIndexedPages" min="100" max="10000" value="1000">
-      </div>
-
-      <div class="settings-item">
-        <div>
-          <div class="settings-label">Lazy loading</div>
-          <div class="settings-description">Load group content on demand</div>
-        </div>
-        <div class="toggle-switch" id="lazyLoadGroups" data-setting="lazyLoadGroups"></div>
-      </div>
-    </div>
-    
-    <div class="version-info">
-      YouTabs v1.0.0<br>
-      Extension for Firefox<br>
-      <a href="https://github.com/aidsoul/youtabs" target="_blank">GitHub</a>
-    </div>
+    </main>
   </div>
   
   <script src="settings.js"></script>
