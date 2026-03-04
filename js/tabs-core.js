@@ -359,7 +359,7 @@ class YouTabsCore {
   // Initialize the web worker for background indexing
   _initIndexWorker() {
     try {
-      this._indexWorker = new Worker('indexer-worker.js');
+      this._indexWorker = new Worker('js/indexer-worker.js');
       
       this._indexWorker.onmessage = (e) => {
         const { type, headings, count, error } = e.data;

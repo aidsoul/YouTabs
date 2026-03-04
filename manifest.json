@@ -3,7 +3,7 @@
   "homepage_url": "https://github.com/AidSoul/YouTabs", 
   "author": "AidSoul <work-aidsoul@outlook.com>",
   "name": "YouTabs",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "A powerful tab management extension for Firefox that provides advanced grouping, organization, and intelligent page indexing with full-text search capabilities.",
   "icons": {
     "16": "icons/16.png",
@@ -43,16 +43,16 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content-extractor.js", "content.js"],
+      "js": ["js/content-extractor.js", "js/content.js"],
       "run_at": "document_idle"
     }
   ],
   "background": {
-    "scripts": ["db.js", "settings-manager.js", "background.js"]
+    "scripts": ["js/db.js", "js/settings-manager.js", "js/background.js"]
   },
   "web_accessible_resources": [
     {
-      "resources": ["indexer-worker.js"],
+      "resources": ["js/indexer-worker.js"],
       "matches": ["<all_urls>"]
     }
   ],
