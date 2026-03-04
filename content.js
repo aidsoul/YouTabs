@@ -144,7 +144,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const pageUrl = message.url;
     
     getSettings().then(textSettings => {
-      const MAX_TEXT_LENGTH = textSettings.maxTextLength || 10000;
+      const MAX_TEXT_LENGTH = textSettings.maxTextLength || 100;
       
       // Validate text length
       if (!selectedText || selectedText.length === 0) {
