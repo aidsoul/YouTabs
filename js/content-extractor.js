@@ -234,15 +234,30 @@ class ContentExtractor {
       const alt = this.truncate(element.alt);
       const src = element.src;
       if (alt || src) {
+        // Extract filename from imgUrl for search by name
+        const name = src ? this.getFilenameFromUrl(src) : '';
+        // Extract file type/extension from filename
+        const fileType = name ? this.getFileExtension(name) : '';
         this.headings.push({
           id: 'img-' + index,
           text: alt,
           type: 'image',
           url: window.location.href,
-          imgUrl: src
+          imgUrl: src,
+          name: name,
+          fileType: fileType
         });
       }
     });
+  }
+
+  /**
+   * Extract file extension from filename
+   */
+  getFileExtension(filename) {
+    if (!filename) return '';
+    const lastDotIndex = filename.lastIndexOf('.');
+    return lastDotIndex > 0 ? filename.substring(lastDotIndex + 1).toLowerCase() : '';
   }
 
   /**

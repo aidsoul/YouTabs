@@ -4645,7 +4645,19 @@ class YouTabsCore {
         
         // Use fuzzy matching for search
         const lowerText = heading.text.toLowerCase();
-        const fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerText, 2);
+        let fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerText, 2);
+        
+        // Also search by name field (for images and other elements with filenames)
+        if (!fuzzyResult.match && heading.name) {
+          const lowerName = heading.name.toLowerCase();
+          fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerName, 2);
+        }
+        
+        // Also search by fileType field (for images and other elements with file types)
+        if (!fuzzyResult.match && heading.fileType) {
+          const lowerFileType = heading.fileType.toLowerCase();
+          fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerFileType, 2);
+        }
         
         if (fuzzyResult.match) {
           // Try to find an open tab with matching URL
