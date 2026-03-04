@@ -256,6 +256,21 @@ class YouTabsCore {
     // Debounced loadTabs for performance
     this.debouncedLoadTabs = debounce(() => this.loadTabs(), 100);
     
+    // Debounced search for performance
+    this._debouncedSetSearchQuery = debounce((query) => this._performSearch(query), 150);
+    
+    // Track active sort dropdown close handlers for cleanup
+    this._activeSortDropdownHandlers = new Set();
+    
+    // Shared DOMParser instance for reuse (avoid creating in loops)
+    this._domParser = new DOMParser();
+    
+    // Cache for group depth calculations
+    this._groupDepthCache = new Map();
+    
+    // Map for O(1) group lookups by ID (rebuilt when groups change)
+    this._groupsById = new Map();
+    
     // Bind event listeners for cleanup
     this._boundLoadTabs = () => this.debouncedLoadTabs();
     this._boundStorageListener = (changes, areaName) => this.handleStorageChange(changes, areaName);
@@ -446,9 +461,8 @@ class YouTabsCore {
     `;
     
     const container = document.createElement('div');
-    // Use DOMParser to safely parse HTML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(modalHTML, 'text/html');
+    // Use shared DOMParser instance to safely parse HTML
+    const doc = this._domParser.parseFromString(modalHTML, 'text/html');
     this.modal = doc.body.firstElementChild;
     document.body.appendChild(this.modal);
     
@@ -1228,6 +1242,9 @@ class YouTabsCore {
           }));
         }
         
+        // Build groups lookup Map for O(1) access
+        this._rebuildGroupsMap();
+        
         // Load group tab metadata from IndexedDB
         const storedGroupTabMeta = await window.YouTabsDB.getGroupTabMetadata();
         if (storedGroupTabMeta && Object.keys(storedGroupTabMeta).length > 0) {
@@ -1244,6 +1261,9 @@ class YouTabsCore {
           }));
         }
         
+        // Build groups lookup Map for O(1) access
+        this._rebuildGroupsMap();
+        
         const storedGroupTabMeta = await browser.storage.local.get('groupTabMetadata');
         if (storedGroupTabMeta.groupTabMetadata) {
           this.groupTabMetadata = storedGroupTabMeta.groupTabMetadata;
@@ -1256,11 +1276,8 @@ class YouTabsCore {
         this.customTabNames = storedTabNames.customTabNames;
       }
       
-      // Load group tab metadata
-      const storedGroupTabMeta = await browser.storage.local.get('groupTabMetadata');
-      if (storedGroupTabMeta.groupTabMetadata) {
-        this.groupTabMetadata = storedGroupTabMeta.groupTabMetadata;
-      }
+      // Note: groupTabMetadata is already loaded above (lines 1247-1250)
+      // Removed duplicate request to browser.storage.local.get('groupTabMetadata')
     } catch (error) {
       console.error('Error loading settings:', error);
     }
@@ -1277,9 +1294,28 @@ class YouTabsCore {
           customGroups: this.customGroups
         });
       }
+      
+      // Clear depth cache since group structure may have changed
+      this.clearGroupDepthCache();
+      
+      // Rebuild groups lookup Map
+      this._rebuildGroupsMap();
     } catch (error) {
       console.error('Error saving custom groups:', error);
     }
+  }
+  
+  // Rebuild the groups lookup Map for O(1) access by ID
+  _rebuildGroupsMap() {
+    this._groupsById.clear();
+    for (const group of this.customGroups) {
+      this._groupsById.set(group.id, group);
+    }
+  }
+  
+  // Get group by ID with O(1) lookup
+  _getGroupById(groupId) {
+    return this._groupsById.get(groupId);
   }
   
   // Save custom tab names to storage
@@ -1407,13 +1443,27 @@ class YouTabsCore {
     return newGroup;
   }
   
-  // Get nesting depth of a group
+  // Get nesting depth of a group (with memoization)
   getGroupDepth(groupId, depth = 0) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    // Check cache first
+    if (this._groupDepthCache.has(groupId)) {
+      return this._groupDepthCache.get(groupId);
+    }
+    
+    const group = this._getGroupById(groupId);
     if (!group || !group.parentId) {
+      this._groupDepthCache.set(groupId, depth);
       return depth;
     }
-    return this.getGroupDepth(group.parentId, depth + 1);
+    
+    const result = this.getGroupDepth(group.parentId, depth + 1);
+    this._groupDepthCache.set(groupId, result);
+    return result;
+  }
+  
+  // Clear depth cache when groups are modified
+  clearGroupDepthCache() {
+    this._groupDepthCache.clear();
   }
   
   // Get all subgroups (children) of a group
@@ -1439,7 +1489,7 @@ class YouTabsCore {
   
   // Rename a custom group
   async renameCustomGroup(groupId, newName) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this._getGroupById(groupId);
     if (group) {
       group.name = newName;
       await this.saveCustomGroups();
@@ -1449,7 +1499,7 @@ class YouTabsCore {
   
   // Update group color
   async updateCustomGroupColor(groupId, newColor) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this._getGroupById(groupId);
     if (group) {
       group.color = newColor;
       await this.saveCustomGroups();
@@ -1479,7 +1529,7 @@ class YouTabsCore {
   
   // Add tab to custom group (removes from other groups)
   async addTabToGroup(tabId, groupId) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this._getGroupById(groupId);
     // Convert tabId to number for comparison
     const numericTabId = Number(tabId);
     
@@ -1521,7 +1571,7 @@ class YouTabsCore {
   
   // Remove tab from custom group
   async removeTabFromGroup(tabId, groupId) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this._getGroupById(groupId);
     if (group) {
       // Convert to number for comparison
       const numericTabId = Number(tabId);
@@ -1531,22 +1581,27 @@ class YouTabsCore {
     }
   }
   
-  // Get custom group for a tab
+  // Get custom group for a tab (optimized with early exit)
   getCustomGroupForTab(tabId) {
     const numericTabId = Number(tabId);
-    return this.customGroups.find(g => g.tabIds.some(id => Number(id) === numericTabId));
+    for (const group of this.customGroups) {
+      if (group.tabIds.some(id => Number(id) === numericTabId)) {
+        return group;
+      }
+    }
+    return undefined;
   }
   
   // Get all tabs in a custom group
   getTabsInCustomGroup(groupId) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this._getGroupById(groupId);
     if (!group) return [];
     return this.tabs.filter(tab => group.tabIds.some(id => Number(id) === tab.id));
   }
   
   // Get sorted tabs in a custom group
   getSortedTabsInGroup(groupId) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this._getGroupById(groupId);
     if (!group) return [];
     
     const tabsInGroup = this.tabs.filter(tab => group.tabIds.some(id => Number(id) === tab.id));
@@ -1606,7 +1661,7 @@ class YouTabsCore {
   
   // Update group sorting settings
   async updateGroupSorting(groupId, sortBy, sortOrder) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this._getGroupById(groupId);
     if (group) {
       group.sortBy = sortBy;
       group.sortOrder = sortOrder;
@@ -2474,6 +2529,9 @@ class YouTabsCore {
     
     this.tabsList.innerHTML = '';
     
+    // Use DocumentFragment for batch DOM operations - reduces reflow/repaint
+    const fragment = document.createDocumentFragment();
+    
     // Determine which tabs to display
     const displayTabs = this.searchQuery ? this.filteredTabs : this.tabs;
     
@@ -2491,7 +2549,7 @@ class YouTabsCore {
     if (this.searchQuery && displayTabs.length > 0) {
       displayTabs.forEach((tab, index) => {
         const tabElement = this.createTabElement(tab, index, 'search');
-        this.tabsList.appendChild(tabElement);
+        fragment.appendChild(tabElement);
       });
     }
     
@@ -2565,9 +2623,8 @@ class YouTabsCore {
         const subcategoryHeader = document.createElement('div');
         subcategoryHeader.className = 'heading-search-subcategory-header';
         
-        // Use DOMParser to safely parse HTML
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`
+        // Use shared DOMParser instance to safely parse HTML
+        const doc = this._domParser.parseFromString(`
           <span class="heading-search-subcategory-toggle">+</span>
           <span class="heading-search-subcategory-title">${typeLabels[type] || type}</span>
           <span class="heading-search-subcategory-count">${results.length}</span>
@@ -2643,9 +2700,8 @@ class YouTabsCore {
             </div>
           `;
           
-          // Use DOMParser to safely parse HTML
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(itemContent, 'text/html');
+          // Use shared DOMParser instance to safely parse HTML
+          const doc = this._domParser.parseFromString(itemContent, 'text/html');
           while (doc.body.firstChild) {
             headingItem.appendChild(doc.body.firstChild);
           }
@@ -2755,15 +2811,14 @@ class YouTabsCore {
         headingResultsContainer.appendChild(subcategory);
       });
       
-      this.tabsList.appendChild(headingResultsContainer);
+      fragment.appendChild(headingResultsContainer);
     }
     
     // Show search results indicator
     const hasHeadingResults = this.headingSearchResults && this.headingSearchResults.length > 0;
     if (this.searchQuery && displayTabs.length === 0 && !hasHeadingResults) {
-      // Use DOMParser to safely parse HTML
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(`
+      // Use shared DOMParser instance to safely parse HTML
+      const doc = this._domParser.parseFromString(`
         <div class="tabs-empty">
           <svg class="tabs-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8"/>
@@ -2772,7 +2827,8 @@ class YouTabsCore {
           <span class="tabs-empty-text">No results found for "${this.escapeHtml(this.searchQuery)}"</span>
         </div>
       `, 'text/html');
-      this.tabsList.appendChild(doc.body);
+      fragment.appendChild(doc.body);
+      this.tabsList.appendChild(fragment); // Append fragment before returning
       return;
     }
     
@@ -2924,9 +2980,8 @@ class YouTabsCore {
           `;
         }
         
-        // Use DOMParser to safely parse HTML
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`
+        // Use shared DOMParser instance to safely parse HTML
+        const doc = this._domParser.parseFromString(`
           <div class="tab-group-toggle">
             <span class="tab-group-toggle-icon">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2988,16 +3043,20 @@ class YouTabsCore {
             });
           }
           
-          // Close dropdown when clicking outside
+          // Close dropdown when clicking outside - use { once: true } to prevent memory leaks
           const closeSortDropdown = (e) => {
             if (sortDropdown && !sortDropdown.contains(e.target) && !e.target.closest('.group-sort-btn')) {
               sortDropdown.style.display = 'none';
             }
           };
           
+          // Store reference for potential cleanup
+          this._activeSortDropdownHandlers.add(closeSortDropdown);
+          
           // Use a timeout to avoid immediate trigger from the button click
+          // { once: true } ensures the listener is auto-removed after first trigger
           setTimeout(() => {
-            document.addEventListener('click', closeSortDropdown);
+            document.addEventListener('click', closeSortDropdown, { once: true });
           }, 0);
           
           // Sort option clicks
@@ -3144,14 +3203,20 @@ class YouTabsCore {
       tabsToRender = this.getSortedTabsInGroup(groupId);
     }
     
+    // Use DocumentFragment for tabs to reduce DOM operations
+    const tabsFragment = document.createDocumentFragment();
     tabsToRender.forEach(tab => {
       const tabElement = this.createTabElement(tab, this.tabs.indexOf(tab), groupKey);
-      tabList.appendChild(tabElement);
+      tabsFragment.appendChild(tabElement);
     });
+    tabList.appendChild(tabsFragment);
       
       groupContainer.appendChild(tabList);
-      this.tabsList.appendChild(groupContainer);
+      fragment.appendChild(groupContainer);
     });
+    
+    // Single DOM operation to append all content
+    this.tabsList.appendChild(fragment);
   }
   
   getGroupInfo(groupKey, group) {
@@ -3702,9 +3767,8 @@ class YouTabsCore {
       </button>`;
     }
     
-    // Use DOMParser to safely parse HTML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`
+    // Use shared DOMParser instance to safely parse HTML
+    const doc = this._domParser.parseFromString(`
       ${treeTwistyHtml}
       <div class="tab-favicon-wrapper">
         ${faviconHtml}
@@ -3817,9 +3881,8 @@ class YouTabsCore {
     if (indexAllBtn) {
       indexAllBtn.addEventListener('click', async () => {
         const originalHtml = indexAllBtn.innerHTML;
-        // Show loading icon while indexing - use DOMParser for safety
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning">
+        // Show loading icon while indexing - use shared DOMParser for safety
+        const doc = this._domParser.parseFromString(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning">
           <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
         </svg>`, 'text/html');
         indexAllBtn.innerHTML = '';
@@ -3828,9 +3891,8 @@ class YouTabsCore {
         
         await this.indexAllTabs();
         
-        // Restore original content using DOMParser for safety
-        const restoreParser = new DOMParser();
-        const restoreDoc = restoreParser.parseFromString(originalHtml, 'text/html');
+        // Restore original content using shared DOMParser for safety
+        const restoreDoc = this._domParser.parseFromString(originalHtml, 'text/html');
         indexAllBtn.textContent = '';
         while (restoreDoc.body.firstChild) {
           indexAllBtn.appendChild(restoreDoc.body.firstChild);
@@ -4471,12 +4533,101 @@ class YouTabsCore {
     }
   }
   
-  // Search page headings
-  searchHeadings(query) {
+  // Search page headings (uses Web Worker when available)
+  async searchHeadings(query) {
     if (!query || !this.settings.enablePageSearch || this.filterHeadingTypes.length === 0) {
       return [];
     }
     
+    // Try to use Web Worker for search if available
+    if (this._workerAvailable && this._indexWorker) {
+      try {
+        const results = await this._searchHeadingsInWorker(query);
+        return results;
+      } catch (error) {
+        console.warn('Worker search failed, falling back to main thread:', error);
+      }
+    }
+    
+    // Fallback to synchronous search on main thread
+    return this._searchHeadingsSync(query);
+  }
+  
+  // Search headings using Web Worker
+  _searchHeadingsInWorker(query) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Worker search timeout'));
+      }, 5000);
+      
+      const handleMessage = (e) => {
+        const { type, results, error } = e.data;
+        
+        if (type === 'searchCompleted') {
+          clearTimeout(timeout);
+          this._indexWorker.removeEventListener('message', handleMessage);
+          
+          // Enrich results with tab info
+          const enrichedResults = this._enrichSearchResults(results);
+          resolve(enrichedResults);
+        } else if (type === 'error') {
+          clearTimeout(timeout);
+          this._indexWorker.removeEventListener('message', handleMessage);
+          reject(new Error(error));
+        }
+      };
+      
+      this._indexWorker.addEventListener('message', handleMessage);
+      
+      // Send search request to worker
+      this._indexWorker.postMessage({
+        type: 'searchHeadings',
+        data: {
+          query: query,
+          pageHeadings: this.pageHeadings,
+          filterHeadingTypes: this.filterHeadingTypes,
+          maxResults: this.settings.maxSearchResults || 15
+        }
+      });
+    });
+  }
+  
+  // Enrich worker search results with tab information
+  _enrichSearchResults(results) {
+    const openTabs = this.tabs;
+    
+    return results.map(result => {
+      const pageUrl = result.pageUrl;
+      const matchingTab = openTabs.find(t => {
+        try {
+          const tUrl = t.url || '';
+          const hUrl = pageUrl || '';
+          return tUrl.includes(hUrl) || hUrl.includes(tUrl);
+        } catch {
+          return false;
+        }
+      });
+      
+      const isTabOpen = !!matchingTab;
+      
+      // Adjust relevance for open tabs
+      let relevance = result.relevance;
+      if (isTabOpen) {
+        relevance += 5;
+      }
+      
+      return {
+        ...result,
+        tabId: matchingTab ? matchingTab.id : null,
+        tab: matchingTab,
+        isTabOpen: isTabOpen,
+        relevance: relevance
+      };
+    });
+  }
+  
+  // Synchronous search on main thread (fallback)
+  _searchHeadingsSync(query) {
     const results = [];
     const lowerQuery = query.toLowerCase();
     const maxResults = this.settings.maxSearchResults || 15;
@@ -4486,8 +4637,6 @@ class YouTabsCore {
     
     // Search through all indexed headings (including closed tabs)
     for (const [urlKey, headings] of Object.entries(this.pageHeadings)) {
-      // urlKey is the normalized URL
-      
       for (const heading of headings) {
         // Filter by heading type
         if (!this.filterHeadingTypes.includes(heading.type)) {
@@ -4517,27 +4666,20 @@ class YouTabsCore {
           // Calculate relevance score using fuzzy match results
           let relevance = 0;
           
-          // Use fuzzy score (0-1) as base relevance
-          // Exact match has distance 0, score 1; fuzzy matches have lower scores
           if (fuzzyResult.distance === 0) {
-            // Exact match (score = 1)
             relevance = 100;
           } else if (fuzzyResult.distance <= 1) {
-            // Near match (very small edit distance)
             relevance = 80 + (1 - fuzzyResult.distance) * 10;
           } else {
-            // Fuzzy match - scale fuzzy score (0-1) to relevance (30-70 range)
             relevance = 30 + fuzzyResult.score * 40;
           }
           
-          // Give higher priority to headings (h1-h6) and paragraphs
           if (heading.type === 'heading') {
             relevance += 20;
           } else if (heading.type === 'paragraph') {
             relevance += 10;
           }
           
-          // Give slightly higher priority to results from open tabs
           if (isTabOpen) {
             relevance += 5;
           }
@@ -5030,6 +5172,12 @@ class YouTabsCore {
   
   // Search functionality
   setSearchQuery(query) {
+    // Use debounced search for better performance
+    this._debouncedSetSearchQuery(query);
+  }
+  
+  // Internal search method (called by debounced wrapper)
+  async _performSearch(query) {
     this.searchQuery = query?.toLowerCase() || '';
     
     // Apply filter - only filter tabs if filterTabs is enabled
@@ -5038,7 +5186,7 @@ class YouTabsCore {
     // Also search page headings if enabled and has heading types selected
     this.headingSearchResults = [];
     if (this.searchQuery && this.settings.enablePageSearch && this.filterHeadingTypes.length > 0) {
-      this.headingSearchResults = this.searchHeadings(this.searchQuery);
+      this.headingSearchResults = await this.searchHeadings(this.searchQuery);
     }
     
     this.renderTabs();

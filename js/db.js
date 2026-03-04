@@ -8,7 +8,6 @@ const DB_VERSION = 6;
 const STORE_CUSTOM_GROUPS = 'customGroups';
 const STORE_GROUP_TAB_METADATA = 'groupTabMetadata';
 const STORE_PAGES_INDEX = 'pagesIndex';
-const STORE_PAGES = 'pages'; // Deprecated: table removed
 
 // Database instance
 let dbInstance = null;

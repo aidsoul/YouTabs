@@ -3,6 +3,95 @@
  * Handles heavy indexing operations in background to avoid blocking UI
  */
 
+// Fuzzy match implementation for worker (avoids loading entire YouTabsCore)
+function fuzzyMatch(query, text, maxDistance = 2) {
+  const lowerQuery = query.toLowerCase();
+  const lowerText = text.toLowerCase();
+  
+  // Exact match
+  if (lowerText.includes(lowerQuery)) {
+    return { match: true, distance: 0, score: 1 };
+  }
+  
+  // Word-based matching
+  const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+  const textWords = lowerText.split(/\s+/).filter(w => w.length > 0);
+  
+  if (queryWords.length > 0 && textWords.length > 0) {
+    let allWordsFound = true;
+    let totalWordDistance = 0;
+    
+    for (const qWord of queryWords) {
+      let minDist = Infinity;
+      
+      for (const tWord of textWords) {
+        if (tWord === qWord) {
+          minDist = 0;
+          break;
+        }
+        if (Math.abs(tWord.length - qWord.length) <= maxDistance) {
+          const dist = levenshteinDistance(qWord, tWord, maxDistance);
+          if (dist < minDist) {
+            minDist = dist;
+          }
+          if (minDist === 0) break;
+        }
+      }
+      
+      if (minDist <= maxDistance) {
+        totalWordDistance += minDist;
+      } else {
+        allWordsFound = false;
+        break;
+      }
+    }
+    
+    if (allWordsFound) {
+      const avgDistance = totalWordDistance / queryWords.length;
+      const score = Math.max(0, 1 - avgDistance / (maxDistance + 1));
+      return { match: true, distance: avgDistance, score };
+    }
+  }
+  
+  return { match: false, distance: Infinity, score: 0 };
+}
+
+// Levenshtein distance for fuzzy matching
+function levenshteinDistance(str1, str2, maxDist = Infinity) {
+  const m = str1.length;
+  const n = str2.length;
+  
+  if (Math.abs(m - n) > maxDist) {
+    return maxDist + 1;
+  }
+  
+  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  
+  for (let i = 0; i <= m; i++) {
+    dp[i][0] = i;
+  }
+  
+  for (let j = 0; j <= n; j++) {
+    dp[0][j] = j;
+  }
+  
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (str1[i - 1] === str2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = 1 + Math.min(
+          dp[i - 1][j],
+          dp[i][j - 1],
+          dp[i - 1][j - 1]
+        );
+      }
+    }
+  }
+  
+  return dp[m][n];
+}
+
 // Message handler
 self.onmessage = async function(e) {
   const { type, data } = e.data;
@@ -13,6 +102,9 @@ self.onmessage = async function(e) {
       break;
     case 'processBatch':
       await processBatch(data);
+      break;
+    case 'searchHeadings':
+      await searchHeadingsInWorker(data);
       break;
     default:
       self.postMessage({ type: 'error', error: 'Unknown message type' });
@@ -170,4 +262,68 @@ async function processBatch({ pages, maxChars = 250 }) {
     type: 'batchProcessed', 
     results: results 
   });
+}
+
+// Search headings in worker to avoid blocking UI
+async function searchHeadingsInWorker({ query, pageHeadings, filterHeadingTypes, maxResults = 15 }) {
+  try {
+    const results = [];
+    const lowerQuery = query.toLowerCase();
+    
+    for (const [urlKey, headings] of Object.entries(pageHeadings)) {
+      for (const heading of headings) {
+        // Filter by heading type
+        if (!filterHeadingTypes.includes(heading.type)) {
+          continue;
+        }
+        
+        // Use fuzzy matching for search
+        const lowerText = heading.text.toLowerCase();
+        const fuzzyResult = fuzzyMatch(lowerQuery, lowerText, 2);
+        
+        if (fuzzyResult.match) {
+          // Calculate relevance score
+          let relevance = 0;
+          
+          if (fuzzyResult.distance === 0) {
+            relevance = 100;
+          } else if (fuzzyResult.distance <= 1) {
+            relevance = 80 + (1 - fuzzyResult.distance) * 10;
+          } else {
+            relevance = 30 + fuzzyResult.score * 40;
+          }
+          
+          // Give higher priority to headings (h1-h6) and paragraphs
+          if (heading.type === 'heading') {
+            relevance += 20;
+          } else if (heading.type === 'paragraph') {
+            relevance += 10;
+          }
+          
+          results.push({
+            pageUrl: heading.url || urlKey,
+            heading: heading,
+            relevance: relevance,
+            fuzzyScore: fuzzyResult.score
+          });
+        }
+      }
+    }
+    
+    // Sort by relevance and limit results
+    results.sort((a, b) => b.relevance - a.relevance);
+    const limitedResults = results.slice(0, maxResults);
+    
+    self.postMessage({
+      type: 'searchCompleted',
+      results: limitedResults,
+      count: limitedResults.length
+    });
+    
+  } catch (error) {
+    self.postMessage({
+      type: 'error',
+      error: error.message
+    });
+  }
 }
