@@ -218,6 +218,21 @@ class YouTabsCore {
     // Setup GroupManager event listeners
     this._setupGroupManagerListeners();
     
+    // Initialize DragDropManager
+    this.dragDropManager = new DragDropManager({
+      tabManager: this.tabManager,
+      groupManager: this.groupManager,
+      getSettings: () => this.settings,
+      getTabsInGroup: (groupKey) => this.getTabsInGroup(groupKey),
+      addTabToGroup: (tabId, groupId) => this.addTabToGroup(tabId, groupId),
+      removeTabFromGroup: (tabId, groupId) => this.removeTabFromGroup(tabId, groupId),
+      getCustomGroupForTab: (tabId) => this.getCustomGroupForTab(tabId),
+      getGroupDepth: (groupId) => this.getGroupDepth(groupId),
+      saveCustomGroups: () => this.saveCustomGroups(),
+      renderTabs: () => this.renderTabs(),
+      loadTabs: () => this.loadTabs()
+    });
+    
     // Initialize SearchEngine
     this.searchEngine = new SearchEngine({
       settings: {},
@@ -236,9 +251,7 @@ class YouTabsCore {
     // State - sync with TabManager
     this.tabs = this.tabManager.getTabs();
     this.activeTabId = null;
-    this.draggedTab = null;
-    this.draggedIndex = null;
-    this.draggedGroup = null;
+    // Drag state is now managed by DragDropManager
     
     // Settings manager
     this.settingsManager = getSettingsManager();
@@ -1487,7 +1500,7 @@ class YouTabsCore {
   // Add tab to custom group (removes from other groups) - delegated to GroupManager
   async addTabToGroup(tabId, groupId) {
     await this.groupManager.addTabToGroup(tabId, groupId);
-    this.renderTabs();
+    // Note: renderTabs() is called by the tabAddedToGroup event listener
   }
   
   // Remove tab from custom group - delegated to GroupManager
@@ -1716,356 +1729,7 @@ class YouTabsCore {
     }
   }
   
-  // Handle drag over custom group
-  handleCustomGroupDragOver(e, groupKey) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
-    const tabList = e.target.closest('.tab-group-tabs');
-    if (tabList) {
-      tabList.classList.add('drag-over');
-    }
-    
-    // Remove drag-over class from other group tab lists
-    document.querySelectorAll('.tab-group-tabs').forEach(list => {
-      if (list !== tabList) {
-        list.classList.remove('drag-over');
-      }
-    });
-  }
   
-  // Handle drag leave custom group
-  handleCustomGroupDragLeave(e, groupKey) {
-    const tabList = e.target.closest('.tab-group-tabs');
-    // Only remove if we're actually leaving the tab list, not entering a child element
-    if (tabList && !tabList.contains(e.relatedTarget)) {
-      tabList.classList.remove('drag-over');
-    }
-  }
-  
-  // Handle drag over sorted group (domain/color/time) - allow drop on custom groups
-  handleSortedGroupDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
-    // Check if there's a custom group under the cursor
-    const customGroup = e.target.closest('.tab-group-tabs[data-group-key^="custom_"]');
-    if (customGroup) {
-      customGroup.classList.add('drag-over');
-    }
-  }
-  
-  // Handle drag leave sorted group
-  handleSortedGroupDragLeave(e) {
-    // Check if we're actually leaving the tab list
-    const tabList = e.target.closest('.tab-group-tabs');
-    if (tabList && !tabList.contains(e.relatedTarget)) {
-      tabList.classList.remove('drag-over');
-    }
-  }
-  
-  // Handle drop on sorted group - check if dropped on a custom group
-  async handleSortedGroupDrop(e) {
-    e.preventDefault();
-    
-    // Find if we dropped on a custom group
-    const customGroupTabList = e.target.closest('.tab-group-tabs[data-group-key^="custom_"]');
-    
-    // Handle group drop onto custom group
-    if (customGroupTabList && this.draggedGroup && !this.draggedTab) {
-      const groupKey = customGroupTabList.dataset.groupKey;
-      const targetGroupId = groupKey.replace('custom_', '');
-      const targetDepth = this.getGroupDepth(targetGroupId);
-      
-      // Check if target is at max depth (level 3)
-      if (targetDepth >= 2) {
-        console.warn('Cannot nest group into level 3 subgroup');
-        this.cleanupDrag();
-        return;
-      }
-      
-      const sourceGroupId = this.draggedGroup.replace('custom_', '');
-      const sourceGroup = this.groupManager._getGroupById(sourceGroupId);
-
-      if (!sourceGroup) {
-        this.cleanupDrag();
-        return;
-      }
-      
-      // Prevent dropping a group onto itself or its descendants
-      const isDescendant = (parentId, childId) => {
-        const child = this.groupManager._getGroupById(childId);
-        if (!child) return false;
-        if (child.parentId === parentId) return true;
-        return isDescendant(parentId, child.parentId);
-      };
-      
-      if (isDescendant(sourceGroupId, targetGroupId)) {
-        console.warn('Cannot drop a group onto its own descendant');
-        this.cleanupDrag();
-        return;
-      }
-      
-      // Move source group into target group
-      sourceGroup.parentId = targetGroupId;
-      await this.saveCustomGroups();
-      this.renderTabs();
-      this.cleanupDrag();
-      return;
-    }
-    
-    // Handle tab drop onto custom group
-    if (customGroupTabList && this.draggedTab) {
-      const groupKey = customGroupTabList.dataset.groupKey;
-      const groupId = groupKey.replace('custom_', '');
-      const tabId = this.draggedTab.id;
-      
-      try {
-        // Add tab to custom group
-        await this.addTabToGroup(tabId, groupId);
-        this.cleanupDrag();
-      } catch (error) {
-        console.error('Error adding tab to group:', error);
-      }
-    }
-    
-    // Clean up all drag-over classes
-    document.querySelectorAll('.tab-group-tabs').forEach(list => {
-      list.classList.remove('drag-over');
-    });
-  }
-  
-  // Handle drop on custom group
-  async handleCustomGroupDrop(e, groupKey) {
-    e.preventDefault();
-    e.stopPropagation(); // Prevent event from bubbling to groupContainer
-    
-    const tabList = e.target.closest('.tab-group-tabs');
-    if (tabList) {
-      tabList.classList.remove('drag-over');
-    }
-    
-    // Clean up all drag-over classes
-    document.querySelectorAll('.tab-group-tabs').forEach(list => {
-      list.classList.remove('drag-over');
-    });
-    
-    const groupId = groupKey.replace('custom_', '');
-    
-    if (this.draggedTab) {
-      // Save the tab ID immediately to avoid issues with async operations
-      const tabId = this.draggedTab.id;
-      
-      try {
-        // Check if tab is already in a different custom group
-        const currentGroup = this.getCustomGroupForTab(tabId);
-        
-        if (currentGroup && currentGroup.id !== groupId) {
-          // Tab is in another group - move it (remove from old, add to new)
-          await this.removeTabFromGroup(tabId, currentGroup.id);
-          await this.addTabToGroup(tabId, groupId);
-        } else if (!currentGroup) {
-          // Tab is not in any custom group - just add it
-          await this.addTabToGroup(tabId, groupId);
-        }
-        // If already in this group, do nothing
-        
-        // Clean up drag state
-        this.cleanupDrag();
-        this.draggedTab = null;
-      } catch (error) {
-        console.error('Error moving tab between groups:', error);
-      }
-    }
-  }
-  
-  // Group drag state
-  draggedGroup = null;
-  
-  // Handle group drag start
-  handleGroupDragStart(e, groupKey) {
-    this.draggedGroup = groupKey;
-    e.target.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', JSON.stringify({
-      type: 'group',
-      groupKey: groupKey
-    }));
-  }
-  
-  // Handle group drag end
-  handleGroupDragEnd(e) {
-    e.target.classList.remove('dragging');
-    document.querySelectorAll('.tab-group-header').forEach(header => {
-      header.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom', 'drag-over-center');
-    });
-    this.draggedGroup = null;
-  }
-  
-  // Handle group drag over (for both groups and tabs)
-  handleGroupDragOver(e, targetGroupKey) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
-    // Check if we're dragging a group or a tab
-    const isDraggingGroup = this.draggedGroup && this.draggedGroup !== targetGroupKey;
-    const isDraggingTab = this.draggedTab;
-    
-    if (!isDraggingGroup && !isDraggingTab) return;
-    
-    // Don't allow dropping a group onto itself
-    if (isDraggingGroup && this.draggedGroup === targetGroupKey) return;
-    
-    // Remove previous indicators
-    document.querySelectorAll('.tab-group-header').forEach(header => {
-      header.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom', 'drag-over-center');
-    });
-    
-    const header = e.target.closest('.tab-group-header');
-    if (header) {
-      const rect = header.getBoundingClientRect();
-      const midY = rect.top + rect.height / 2;
-      
-      // Check if dropping onto the center of the header (not above/below)
-      const headerHeight = rect.height;
-      const isOntoCenter = Math.abs(e.clientY - midY) < headerHeight * 0.3;
-      
-      if (isDraggingTab) {
-        // When dragging a tab, always show center drop indicator on the header
-        header.classList.add('drag-over', 'drag-over-center');
-      } else if (isDraggingGroup) {
-        if (isOntoCenter) {
-          // Dropping onto the group - check if target is at max depth
-          const targetGroupId = targetGroupKey.replace('custom_', '');
-          const targetDepth = this.getGroupDepth(targetGroupId);
-          
-          if (targetDepth < 2) {
-            // Target is not at max depth - allow dropping into it
-            header.classList.add('drag-over', 'drag-over-center');
-          } else {
-            // Target is at max depth (level 3) - only allow reorder, not nesting
-            if (e.clientY < midY) {
-              header.classList.add('drag-over', 'drag-over-top');
-            } else {
-              header.classList.add('drag-over', 'drag-over-bottom');
-            }
-          }
-        } else if (e.clientY < midY) {
-          header.classList.add('drag-over', 'drag-over-top');
-        } else {
-          header.classList.add('drag-over', 'drag-over-bottom');
-        }
-      }
-    }
-  }
-  
-  // Handle group drop (reorder, change parent, or add tab to group)
-  async handleGroupDrop(e, targetGroupKey) {
-    e.preventDefault();
-    e.stopPropagation(); // Prevent event from bubbling to parent elements
-    
-    // Check if we're dragging a tab
-    if (this.draggedTab) {
-      // Save the tab ID immediately to avoid issues with async operations
-      const tabId = this.draggedTab.id;
-      const groupId = targetGroupKey.replace('custom_', '');
-      
-      try {
-        // Check if tab is already in a different custom group
-        const currentGroup = this.getCustomGroupForTab(tabId);
-        
-        if (currentGroup && currentGroup.id !== groupId) {
-          // Tab is in another group - move it (remove from old, add to new)
-          await this.removeTabFromGroup(tabId, currentGroup.id);
-          await this.addTabToGroup(tabId, groupId);
-        } else if (!currentGroup) {
-          // Tab is not in any custom group - just add it
-          await this.addTabToGroup(tabId, groupId);
-        }
-        // If already in this group, do nothing
-      } catch (error) {
-        console.error('Error adding tab to group:', error);
-      }
-      
-      this.cleanupDrag();
-      return;
-    }
-    
-    // Handle group drop (reorder or change parent)
-    if (!this.draggedGroup || this.draggedGroup === targetGroupKey) {
-      this.cleanupDrag();
-      return;
-    }
-    
-    const sourceGroupId = this.draggedGroup.replace('custom_', '');
-    const targetGroupId = targetGroupKey.replace('custom_', '');
-    
-    // Find the groups
-    const sourceGroup = this.groupManager._getGroupById(sourceGroupId);
-    const targetGroup = this.groupManager._getGroupById(targetGroupId);
-    
-    if (!sourceGroup || !targetGroup) return;
-    
-    // Prevent dropping a group onto itself or its descendants
-    const isDescendant = (parentId, childId) => {
-      const child = this.groupManager._getGroupById(childId);
-      if (!child) return false;
-      if (child.parentId === parentId) return true;
-      return isDescendant(parentId, child.parentId);
-    };
-    
-    if (isDescendant(sourceGroupId, targetGroupId)) {
-      console.warn('Cannot drop a group onto its own descendant');
-      this.cleanupDrag();
-      return;
-    }
-    
-    // Determine if dropping above, below, or onto (into) the target group
-    const header = e.target.closest('.tab-group-header');
-    const rect = header?.getBoundingClientRect();
-    
-    if (!rect) {
-      this.cleanupDrag();
-      return;
-    }
-    
-    const midY = rect.top + rect.height / 2;
-    const headerHeight = rect.height;
-    const isOntoCenter = Math.abs(e.clientY - midY) < headerHeight * 0.3;
-    const dropBelow = e.clientY > midY;
-    
-    // Get current depth of target to calculate new parent
-    const targetDepth = this.getGroupDepth(targetGroupId);
-    
-    // Check if Shift key is pressed - if so, make it a root-level group
-    if (e.shiftKey) {
-      // Move to root level
-      sourceGroup.parentId = null;
-    } else if (isOntoCenter && targetDepth < 2) {
-      // Dropping onto the group center and target is not at max depth - make it a child
-      sourceGroup.parentId = targetGroupId;
-    } else if (isOntoCenter && targetDepth >= 2) {
-      // Dropping onto a level 3 group - cannot nest, just reorder
-      // Keep current parentId (reorder only)
-      console.warn('Cannot nest group into level 3 subgroup');
-    } else {
-      // Dropping above/below - reorder at same level
-      // Keep current parentId
-    }
-    
-    await this.saveCustomGroups();
-    this.renderTabs();
-    
-    // Clean up
-    this.cleanupDrag();
-  }
-  
-  // Cleanup drag visual states
-  cleanupDrag() {
-    document.querySelectorAll('.tab-group-header').forEach(header => {
-      header.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom', 'drag-over-center');
-    });
-  }
   
   
   // Convert hex to HSL - delegated to GroupManager
@@ -2316,6 +1980,20 @@ class YouTabsCore {
   }
   
   renderTabs() {
+    if (!this.tabsList) return;
+    
+    // Debounce rapid render calls to prevent flickering
+    if (this._renderDebounceTimer) {
+      clearTimeout(this._renderDebounceTimer);
+    }
+    
+    this._renderDebounceTimer = setTimeout(() => {
+      this._renderDebounceTimer = null;
+      this._doRenderTabs();
+    }, 50);
+  }
+  
+  _doRenderTabs() {
     if (!this.tabsList) return;
     
     this.tabsList.innerHTML = '';
@@ -2889,9 +2567,9 @@ class YouTabsCore {
       
       if (isCustomGroup) {
         tabList.dataset.groupKey = groupKey;
-        tabList.addEventListener('dragover', (e) => this.handleCustomGroupDragOver(e, groupKey));
-        tabList.addEventListener('dragleave', (e) => this.handleCustomGroupDragLeave(e, groupKey));
-        tabList.addEventListener('drop', (e) => this.handleCustomGroupDrop(e, groupKey));
+        tabList.addEventListener('dragover', (e) => this.dragDropManager.handleCustomGroupDragOver(e, groupKey));
+        tabList.addEventListener('dragleave', (e) => this.dragDropManager.handleCustomGroupDragLeave(e, groupKey));
+        tabList.addEventListener('drop', (e) => this.dragDropManager.handleCustomGroupDrop(e, groupKey));
         
         // Add drag/drop to entire group container for easier dropping
         groupContainer.dataset.groupKey = groupKey;
@@ -2900,7 +2578,8 @@ class YouTabsCore {
           e.dataTransfer.dropEffect = 'move';
           
           // Check if dragging a tab or group - show appropriate feedback
-          if (this.draggedTab || this.draggedGroup) {
+          const dragState = this.dragDropManager.getDragState();
+          if (dragState.isDraggingTab || dragState.isDraggingGroup) {
             groupContainer.classList.add('drag-over');
           }
         });
@@ -2915,22 +2594,23 @@ class YouTabsCore {
           
           const groupId = groupKey.replace('custom_', '');
           const targetDepth = this.getGroupDepth(groupId);
+          const dragState = this.dragDropManager.getDragState();
           
           // Check if we're dragging a group (not a tab)
-          // We check draggedTab first to distinguish between tab drag and group drag
-          if (this.draggedGroup && !this.draggedTab) {
+          if (dragState.isDraggingGroup) {
             // Check if target is at max depth (level 3)
             if (targetDepth >= 2) {
               console.warn('Cannot nest group into level 3 subgroup');
-              this.cleanupDrag();
+              this.dragDropManager.cleanupDrag();
               return;
             }
             
-            const sourceGroupId = this.draggedGroup.replace('custom_', '');
+            const draggedGroup = dragState.draggedGroup;
+            const sourceGroupId = draggedGroup.replace('custom_', '');
             const sourceGroup = this.groupManager._getGroupById(sourceGroupId);
 
             if (!sourceGroup) {
-              this.cleanupDrag();
+              this.dragDropManager.cleanupDrag();
               return;
             }
             
@@ -2944,7 +2624,7 @@ class YouTabsCore {
             
             if (isDescendant(sourceGroupId, groupId)) {
               console.warn('Cannot drop a group onto its own descendant');
-              this.cleanupDrag();
+              this.dragDropManager.cleanupDrag();
               return;
             }
             
@@ -2952,16 +2632,17 @@ class YouTabsCore {
             sourceGroup.parentId = groupId;
             await this.saveCustomGroups();
             this.renderTabs();
-            this.cleanupDrag();
+            this.dragDropManager.cleanupDrag();
             return;
           }
           
           // Handle tab drops
-          if (this.draggedTab) {
-            const tabId = this.draggedTab.id;
+          if (dragState.isDraggingTab) {
+            const tabId = dragState.draggedTab.id;
             try {
               await this.addTabToGroup(tabId, groupId);
-              this.cleanupDrag();
+              // Note: renderTabs() is called by the tabAddedToGroup event listener
+              this.dragDropManager.cleanupDrag();
             } catch (error) {
               console.error('Error adding tab to group:', error);
             }
@@ -2969,9 +2650,9 @@ class YouTabsCore {
         });
       } else {
         // For non-custom groups, still add listeners to allow dropping into custom groups
-        tabList.addEventListener('dragover', (e) => this.handleSortedGroupDragOver(e));
-        tabList.addEventListener('dragleave', (e) => this.handleSortedGroupDragLeave(e));
-        tabList.addEventListener('drop', (e) => this.handleSortedGroupDrop(e));
+        tabList.addEventListener('dragover', (e) => this.dragDropManager.handleSortedGroupDragOver(e));
+        tabList.addEventListener('dragleave', (e) => this.dragDropManager.handleSortedGroupDragLeave(e));
+        tabList.addEventListener('drop', (e) => this.dragDropManager.handleSortedGroupDrop(e));
       }
     
     // Make custom group headers draggable
@@ -2980,10 +2661,10 @@ class YouTabsCore {
       if (groupHeader) {
         groupHeader.draggable = true;
         groupHeader.dataset.groupId = groupKey.replace('custom_', '');
-        groupHeader.addEventListener('dragstart', (e) => this.handleGroupDragStart(e, groupKey));
-        groupHeader.addEventListener('dragend', (e) => this.handleGroupDragEnd(e));
-        groupHeader.addEventListener('dragover', (e) => this.handleGroupDragOver(e, groupKey));
-        groupHeader.addEventListener('drop', (e) => this.handleGroupDrop(e, groupKey));
+        groupHeader.addEventListener('dragstart', (e) => this.dragDropManager.handleGroupDragStart(e, groupKey));
+        groupHeader.addEventListener('dragend', (e) => this.dragDropManager.handleGroupDragEnd(e));
+        groupHeader.addEventListener('dragover', (e) => this.dragDropManager.handleGroupDragOver(e, groupKey));
+        groupHeader.addEventListener('drop', (e) => this.dragDropManager.handleGroupDrop(e, groupKey));
       }
     }
     
@@ -3009,7 +2690,7 @@ class YouTabsCore {
     // Single DOM operation to append all content
     this.tabsList.appendChild(fragment);
   }
-  
+
   getGroupInfo(groupKey, group) {
     // Delegate to GroupManager
     return this.groupManager.getGroupInfo(groupKey, group);
@@ -3539,10 +3220,10 @@ class YouTabsCore {
     tabItem.addEventListener('mouseleave', () => this.hideTabPreview());
     tabItem.addEventListener('mousemove', (e) => this.updatePreviewPosition(e));
     
-    tabItem.addEventListener('dragstart', (e) => this.handleDragStart(e, tab, index, groupKey));
-    tabItem.addEventListener('dragend', (e) => this.handleDragEnd(e));
-    tabItem.addEventListener('dragover', (e) => this.handleDragOver(e, index, groupKey));
-    tabItem.addEventListener('drop', (e) => this.handleDrop(e, index, groupKey));
+    tabItem.addEventListener('dragstart', (e) => this.dragDropManager.handleDragStart(e, tab, index, groupKey));
+    tabItem.addEventListener('dragend', (e) => this.dragDropManager.handleDragEnd(e));
+    tabItem.addEventListener('dragover', (e) => this.dragDropManager.handleDragOver(e, index, groupKey));
+    tabItem.addEventListener('drop', (e) => this.dragDropManager.handleDrop(e, index, groupKey));
     
     return tabItem;
   }
@@ -3633,43 +3314,14 @@ class YouTabsCore {
       });
       
       // Allow dropping groups on empty area to make them root-level
-      this.tabsScrollContainer.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        const data = e.dataTransfer.types.includes('text/plain') ? 
-          JSON.parse(e.dataTransfer.getData('text/plain') || '{}') : {};
-        if (data.type === 'group') {
-          e.dataTransfer.dropEffect = 'move';
-          this.tabsScrollContainer.classList.add('drag-over-empty');
-        }
-      });
+      this.tabsScrollContainer.addEventListener('dragover', (e) =>
+        this.dragDropManager.handleContainerDragOver(e, this.tabsScrollContainer));
       
-      this.tabsScrollContainer.addEventListener('dragleave', (e) => {
-        if (!this.tabsScrollContainer.contains(e.relatedTarget)) {
-          this.tabsScrollContainer.classList.remove('drag-over-empty');
-        }
-      });
+      this.tabsScrollContainer.addEventListener('dragleave', (e) =>
+        this.dragDropManager.handleContainerDragLeave(e, this.tabsScrollContainer));
       
-      this.tabsScrollContainer.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        this.tabsScrollContainer.classList.remove('drag-over-empty');
-        
-        try {
-          const data = JSON.parse(e.dataTransfer.getData('text/plain') || '{}');
-          if (data.type === 'group' && data.groupKey) {
-            const groupId = data.groupKey.replace('custom_', '');
-            const group = this.groupManager._getGroupById(groupId);
-            
-            if (group && group.parentId) {
-              // Make it a root-level group
-              group.parentId = null;
-              await this.saveCustomGroups();
-              this.renderTabs();
-            }
-          }
-        } catch (err) {
-          // Ignore parse errors
-        }
-      });
+      this.tabsScrollContainer.addEventListener('drop', (e) =>
+        this.dragDropManager.handleContainerDrop(e));
     }
     
     document.addEventListener('keydown', this._boundKeydownHandler);
@@ -3961,205 +3613,6 @@ class YouTabsCore {
     }
   }
   
-  handleDragStart(e, tab, index, groupKey) {
-    this.draggedTab = tab;
-    this.draggedIndex = index;
-    this.draggedGroup = groupKey;
-    e.target.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', JSON.stringify({
-      index: index,
-      group: groupKey,
-      tabId: tab.id
-    }));
-  }
-  
-  handleDragEnd(e) {
-    e.target.classList.remove('dragging');
-    document.querySelectorAll('.tab-item').forEach(item => {
-      item.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
-    });
-    document.querySelectorAll('.tab-group-tabs').forEach(group => {
-      group.classList.remove('drag-over');
-    });
-    this.draggedTab = null;
-    this.draggedIndex = null;
-    this.draggedGroup = null;
-  }
-  
-  handleDragOver(e, index, groupKey) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
-    document.querySelectorAll('.tab-item').forEach(item => {
-      item.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
-    });
-    document.querySelectorAll('.tab-group-tabs').forEach(group => {
-      group.classList.remove('drag-over');
-    });
-    
-    const targetTab = e.target.closest('.tab-item');
-    if (targetTab) {
-      // Determine if we're dragging above or below the target tab
-      const rect = targetTab.getBoundingClientRect();
-      const midY = rect.top + rect.height / 2;
-      
-      targetTab.classList.add('drag-over');
-      if (e.clientY < midY) {
-        targetTab.classList.add('drag-over-top');
-      } else {
-        targetTab.classList.add('drag-over-bottom');
-      }
-    }
-  }
-  
-  async handleDrop(e, targetIndex, targetGroup) {
-    e.preventDefault();
-    // NOTE: Removed stopPropagation() to avoid breaking other event handlers
-    // If you need to prevent bubbling, consider using capture phase or specific handlers
-    
-    // Defensive check: if targetGroup is undefined, just clean up and return
-    if (!targetGroup) {
-      this.handleDragEnd(e);
-      return;
-    }
-    
-    let dragData;
-    try {
-      dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
-    } catch (err) {
-      dragData = { index: this.draggedIndex, group: this.draggedGroup };
-    }
-    
-    // Check if dropping into a custom group
-    if (targetGroup.startsWith('custom_')) {
-      const groupId = targetGroup.replace('custom_', '');
-      if (this.draggedTab) {
-        const tabId = this.draggedTab.id;
-        await this.addTabToGroup(tabId, groupId);
-      }
-      return;
-    }
-    
-    if (this.draggedTab) {
-      try {
-        // Find the target tab element
-        const targetTabEl = e.target.closest('.tab-item');
-        
-        if (targetTabEl) {
-          // Get all tab items in the same group container
-          const groupContainer = targetTabEl.closest('.tab-group-tabs');
-          const allTabsInGroup = groupContainer ? Array.from(groupContainer.querySelectorAll('.tab-item')) : [];
-          
-          // Find the actual current index of the target tab
-          const actualTargetIndex = allTabsInGroup.indexOf(targetTabEl);
-          
-          if (actualTargetIndex !== -1) {
-            // Determine if dropping above or below the target
-            const rect = targetTabEl.getBoundingClientRect();
-            const midY = rect.top + rect.height / 2;
-            
-            let newIndex;
-            if (e.clientY < midY) {
-              // Dropping above the target
-              newIndex = actualTargetIndex;
-            } else {
-              // Dropping below the target
-              newIndex = actualTargetIndex + 1;
-            }
-            
-            // Adjust for the dragged tab's current position if moving within same group
-            if (dragData.group === targetGroup) {
-              // FIX 2: Use explicit string comparison for IDs
-              // Save tab ID first to avoid async issues
-              const tabId = this.draggedTab?.id;
-              if (!tabId) {
-                this.handleDragEnd(e);
-                return;
-              }
-              const draggedTabId = String(tabId);
-              const draggedTabIndex = allTabsInGroup.findIndex(tab => 
-                String(tab.dataset.tabId) === draggedTabId
-              );
-              
-              if (draggedTabIndex !== -1) {
-                // If moving down, account for the removed tab
-                if (newIndex > draggedTabIndex) {
-                  newIndex = newIndex - 1;
-                }
-                // Skip if positions are the same
-                if (newIndex === draggedTabIndex) {
-                  this.handleDragEnd(e);
-                  return;
-                }
-              }
-            }
-            
-            // FIX 4: Handle cross-group moves with grouping enabled
-            // Moving between groups with grouping enabled - calculate proper position
-            if (dragData.group !== targetGroup && this.settings.enableGrouping) {
-              // Get the target group's tabs to calculate insertion point
-              const targetGroupTabs = this.getTabsInGroup(targetGroup);
-              const sourceGroup = dragData.group;
-              
-              // Adjust index based on whether we're moving up or down in the target group
-              if (targetIndex > this.draggedIndex && sourceGroup !== targetGroup) {
-                // Moving down - adjust for removed tab
-                newIndex = Math.max(0, targetIndex);
-              }
-            }
-            
-            // Move tab to new position
-            // Save tab ID first to avoid async issues
-            const tabId = this.draggedTab?.id;
-            const tabWindowId = this.draggedTab?.windowId;
-            if (tabId && tabWindowId) {
-              await browser.tabs.move(tabId, {
-                windowId: tabWindowId,
-                index: newIndex
-              });
-            }
-            
-            // Reload tabs to reflect new order
-            await this.loadTabs();
-          }
-        } else {
-          // FIX 1: Fallback when target tab element not found - use targetIndex parameter
-          console.warn('Drop target tab element not found, using fallback with targetIndex');
-          
-          let newIndex = targetIndex;
-          
-          // Apply same-group adjustment logic for fallback
-          if (dragData.group === targetGroup && this.draggedIndex !== null) {
-            if (newIndex > this.draggedIndex) {
-              newIndex = newIndex - 1;
-            }
-            if (newIndex === this.draggedIndex) {
-              this.handleDragEnd(e);
-              return;
-            }
-          }
-          
-          // Handle cross-group moves with grouping enabled (fallback path)
-          if (dragData.group !== targetGroup && this.settings.enableGrouping) {
-            const sourceGroup = dragData.group;
-            if (targetIndex > this.draggedIndex && sourceGroup !== targetGroup) {
-              newIndex = Math.max(0, targetIndex);
-            }
-          }
-          
-          await browser.tabs.move(this.draggedTab?.id, {
-            windowId: this.draggedTab?.windowId,
-            index: newIndex
-          });
-          
-          await this.loadTabs();
-        }
-      } catch (error) {
-        console.error('Error moving tab:', error);
-      }
-    }
-  }
   
   getTabsInGroup(groupKey) {
     // Check if it's a custom group

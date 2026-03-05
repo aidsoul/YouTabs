@@ -1,6 +1,7 @@
 # YouTabs - Firefox Extension
 
 [![Telegram](https://img.shields.io/badge/Telegram-YouTabs-26A5E4?style=flat&logo=telegram)](https://t.me/YouTabs_EXT)
+[![Download](https://img.shields.io/badge/addons-26A5E4?style=flat&logo=firefox)](https://addons.mozilla.org/ru/firefox/addon/you-tabs/)
 
 A powerful tab management extension for Firefox that provides advanced grouping, organization, and intelligent page indexing with full-text search capabilities.
 
