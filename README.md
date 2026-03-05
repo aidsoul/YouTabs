@@ -1,6 +1,42 @@
 # YouTabs - Firefox Extension
 
 [![Telegram](https://img.shields.io/badge/Telegram-YouTabs-26A5E4?style=flat&logo=telegram)](https://t.me/YouTabs_EXT)
+[![Download](https://img.shields.io/badge/addons-26A5E4?style=flat&logo=firefox)](https://addons.mozilla.org/ru/firefox/addon/you-tabs/)
+
+## Changelog
+
+### v1.3.2 (Current Version)
+
+#### New Features
+
+- **Incremental Page Indexing** — The extension now uses MutationObserver to detect changes to indexed pages in real-time. When page content changes (headings added, modified, or removed), the index is updated automatically without re-indexing the entire page. This significantly improves performance and keeps search results always up-to-date.
+
+- **Group Color Inheritance** — When moving tabs or groups to a new parent group, the color now automatically inherits from the new parent group. This creates a more consistent visual hierarchy and makes it easier to organize nested groups with unified color coding.
+
+- **Tab Usage Tracking** — The extension now tracks when each tab is activated and stores usage statistics. This enables future features like "recently used" sorting and smarter tab organization based on your browsing patterns.
+
+#### Improvements
+
+- **Enhanced Search Filtering** — Added more granular control over search filters with real-time count updates showing how many results match each content type (headings, paragraphs, links, images).
+
+- **Action Buttons Left Panel** — Added new setting to toggle action buttons display on the left panel, giving users more control over the interface layout.
+
+- **Better Tab Preview Positioning** — Improved the tab preview positioning algorithm for better accuracy and visibility.
+
+- **Performance Optimizations** — Various internal optimizations to improve overall extension performance and reduce memory usage.
+
+---
+
+## Previous Versions
+
+<details>
+<summary>Click to expand</summary>
+
+### v1.3.1
+
+- Initial release with core features
+
+</details>
 
 A powerful tab management extension for Firefox that provides advanced grouping, organization, and intelligent page indexing with full-text search capabilities.
 

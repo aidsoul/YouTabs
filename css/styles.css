@@ -20,7 +20,7 @@
   --text-secondary: #6b7c93;
   --border-color: #dce1e6;
   --scrollbar-color: #c4c9ce;
-  --accent-color: #49e60bcc;
+  --accent-color: #49e60b;
   --shadow-light: rgba(0, 0, 0, 0.08);
   --shadow-medium: rgba(0, 0, 0, 0.12);
   
@@ -2620,15 +2620,6 @@ body.dark-theme .modal-footer {
   word-break: break-word;
 }
 
-.heading-url {
-  font-size: 11px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-  word-break: break-all;
-  margin-top: 4px;
-  opacity: 0.8;
-}
-
 .heading-tab-info {
   margin-top: 6px;
   padding-left: 28px;
@@ -2651,13 +2642,182 @@ body.dark-theme .modal-footer {
   color: #000;
   padding: 0 2px;
   border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+.yt-highlight-mark:hover {
+  background-color: #ffc107;
+  box-shadow: 0 0 4px rgba(255, 152, 0, 0.5);
+}
+.yt-highlight-current {
+  background-color: #ff9800 !important;
+  box-shadow: 0 0 6px rgba(255, 152, 0, 0.8), 0 0 0 2px rgba(255, 152, 0, 0.3);
+  z-index: 9999;
+  position: relative;
+  border-radius: 3px;
 }
 .yt-highlight-flash {
   animation: yt-highlight-flash-animation 1s ease-out;
 }
 @keyframes yt-highlight-flash-animation {
-  0% { background-color: #ff9800; }
-  100% { background-color: #ffeb3b; }
+  0% { 
+    background-color: #ff9800;
+    transform: scale(1.05);
+    box-shadow: 0 0 8px rgba(255, 152, 0, 0.8);
+  }
+  50% {
+    background-color: #ffc107;
+    transform: scale(1.02);
+  }
+  100% { 
+    background-color: #ffeb3b;
+    transform: scale(1);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  }
+}
+/* Match counter badge */
+.yt-match-counter {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  left: auto !important;
+  bottom: auto !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+  color: #1a1a1a;
+  padding: 14px 24px;
+  border-radius: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  z-index: 2147483647 !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(-20px) scale(0.8);
+  animation: yt-match-counter-show 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  border: 3px solid #ff6b6b;
+}
+@keyframes yt-match-counter-show {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.yt-match-counter .yt-match-icon {
+  font-size: 20px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.15));
+}
+.yt-match-counter .yt-match-count {
+  font-weight: 800;
+  font-size: 17px;
+  color: #e74c3c;
+}
+.yt-match-counter .yt-match-dismiss {
+  margin-left: 6px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.2s;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #e74c3c;
+  font-size: 14px;
+  font-weight: bold;
+  color: white;
+}
+.yt-match-counter .yt-match-dismiss:hover {
+  opacity: 1;
+  background: #c0392b;
+  transform: scale(1.15) rotate(90deg);
+}
+.yt-match-counter.yt-match-counter-hide {
+  animation: yt-match-counter-hide 0.3s ease forwards;
+}
+@keyframes yt-match-counter-hide {
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.9);
+  }
+}
+/* Navigation buttons */
+.yt-highlight-nav {
+  position: fixed !important;
+  top: 20px !important;
+  left: 20px !important;
+  right: auto !important;
+  bottom: auto !important;
+  display: flex;
+  gap: 12px;
+  z-index: 2147483647 !important;
+  opacity: 0;
+  transform: translateY(-20px);
+  animation: yt-highlight-nav-show 0.4s ease 0.2s forwards;
+}
+@keyframes yt-highlight-nav-show {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.yt-highlight-nav-btn {
+  background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
+  color: #1a1a1a;
+  border: 3px solid #ff6b6b;
+  padding: 14px 24px;
+  border-radius: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 3px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.yt-highlight-nav-btn:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  color: white;
+  border-color: #c0392b;
+}
+.yt-highlight-nav-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+.yt-highlight-nav-btn:disabled {
+  background: linear-gradient(135deg, #a8a8a8 0%, #c8c8c8 100%);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  opacity: 0.7;
+}
+.yt-highlight-nav-btn .yt-nav-icon {
+  font-size: 16px;
+  color: #ff6b6b;
+}
+.yt-highlight-nav-btn:hover .yt-nav-icon {
+  color: white;
+}
+.yt-highlight-nav-btn .yt-nav-position {
+  font-size: 12px;
+  opacity: 0.7;
+  font-weight: 600;
+}
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .yt-highlight-mark {
+    background-color: #ffd54f;
+    color: #000;
+  }
+  .yt-highlight-current {
+    background-color: #ff9800 !important;
+  }
 }
 
 /* Image thumbnail in search results */

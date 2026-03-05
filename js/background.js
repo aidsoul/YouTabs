@@ -7,9 +7,6 @@
 const POPUP_MAX_WIDTH = 450;
 const POPUP_MARGIN = 50;
 
-// Store reference to the popup window
-let popupWindowId = null;
-
 // Handle toolbar button click to toggle sidebar
 browser.action.onClicked.addListener(async () => {
   try {
@@ -111,8 +108,9 @@ async function getCurrentWindowTabs() {
 // Helper function to get settings
 async function getSettings() {
   try {
-    const stored = await browser.storage.local.get('settings');
-    return { success: true, settings: stored.settings || {} };
+    const settingsManager = new SettingsManager();
+    const settings = await settingsManager.getAll();
+    return { success: true, settings };
   } catch (error) {
     console.error('Error getting settings:', error);
     return { success: false, error: error.message, settings: {} };
@@ -311,38 +309,9 @@ function showNotification(message) {
   }
 }
 
-// Helper function to update page index and show notification
-async function updatePageIndex(tab) {
-  if (!tab || !tab.id) {
-    showNotification('Invalid tab selected');
-    return { success: false, error: 'Invalid tab' };
-  }
-
-  try {
-    const response = await browser.tabs.sendMessage(tab.id, {
-      action: 'updateIndex',
-      url: tab.url
-    });
-
-    if (response && response.success) {
-      console.log('Index updated:', response.count, 'items indexed');
-      showNotification('Index updated: ' + response.count + ' items indexed');
-    } else {
-      console.error('Failed to update index:', response?.error);
-      showNotification('Failed to update index: ' + (response?.error || 'Unknown error'));
-    }
-
-    return response;
-  } catch (error) {
-    console.error('Error updating index:', error);
-    showNotification('Failed to update index. Make sure the page is fully loaded.');
-    return { success: false, error: error.message };
-  }
-}
 
 // Context menu for adding selected text to indexing
 const CONTEXT_MENU_ID = 'add-to-indexing';
-const UPDATE_INDEX_MENU_ID = 'update-index';
 
 // Create context menu on extension install
 browser.runtime.onInstalled.addListener(() => {
@@ -351,78 +320,40 @@ browser.runtime.onInstalled.addListener(() => {
     title: 'Add to indexing',
     contexts: ['selection']
   });
-  
-  browser.contextMenus.create({
-    id: UPDATE_INDEX_MENU_ID,
-    title: 'Update index',
-    contexts: ['tab']
-  });
-});
-
-// Handle context menu click
-browser.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === CONTEXT_MENU_ID && info.selectionText) {
-    const selectedText = info.selectionText.trim();
-    if (selectedText && tab && tab.id) {
-      try {
-        // Send message to content script to add text to indexing
-        const response = await browser.tabs.sendMessage(tab.id, {
-          action: 'addToIndexing',
-          text: selectedText,
-          url: tab.url
-        });
-        
-        if (response && response.success) {
-          console.log('Added to indexing:', selectedText.substring(0, 50) + '...');
-        } else {
-          console.error('Failed to add to indexing:', response?.error);
-          // Show notification to user
-          browser.notifications.create({
-            type: 'basic',
-            iconUrl: browser.runtime.getManifest().icons?.['48'] || '',
-            title: 'YouTabs',
-            message: 'Failed to add text to indexing: ' + (response?.error || 'Unknown error')
-          });
-        }
-      } catch (error) {
-        console.error('Error adding to indexing:', error);
-        // Show notification to user
-        browser.notifications.create({
-          type: 'basic',
-          iconUrl: browser.runtime.getManifest().icons?.['48'] || '',
-          title: 'YouTabs',
-          message: 'Failed to add text to indexing. Make sure the page is fully loaded.'
-        });
-      }
-    }
-  }
-  
-  // Handle Update index context menu click
-  if (info.menuItemId === UPDATE_INDEX_MENU_ID && tab && tab.id) {
-    await updatePageIndex(tab);
-  }
 });
 
 console.log('YouTabs background script loaded');
 
 // Handle messages from content scripts and sidebar
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'updatePageIndex' && message.tabId) {
-    browser.tabs.get(message.tabId).then(tab => {
-      updatePageIndex(tab).then(sendResponse);
-    }).catch(error => {
-      showNotification('Invalid tab selected');
-      sendResponse({ success: false, error: error.message });
-    });
-    return true; // Keep message channel open for async response
-  }
-
   // Handle incremental index updates from content script (MutationObserver)
   if (message.action === 'incrementalIndexUpdate' && message.url && message.changes) {
     handleIncrementalIndexUpdate(message.url, message.changes).then(result => {
       sendResponse(result);
     }).catch(error => {
       console.error('Incremental index update error:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle full page index update from content script (saves to IndexedDB)
+  if (message.action === 'updatePageIndexInDB' && message.url && message.headings) {
+    handleFullIndexUpdate(message.url, message.headings).then(result => {
+      sendResponse(result);
+    }).catch(error => {
+      console.error('Full index update error:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle adding selected text to index from content script
+  if (message.action === 'addTextToIndex' && message.url && message.text) {
+    handleAddTextToIndex(message.url, message.text).then(result => {
+      sendResponse(result);
+    }).catch(error => {
+      console.error('Add text to index error:', error);
       sendResponse({ success: false, error: error.message });
     });
     return true; // Keep message channel open for async response
@@ -527,6 +458,114 @@ async function handleIncrementalIndexUpdate(url, changes) {
     };
   } catch (error) {
     console.error('handleIncrementalIndexUpdate error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Handle full page index update from content script (saves to IndexedDB)
+async function handleFullIndexUpdate(url, headings) {
+  try {
+    // Check if YouTabsDB is available
+    if (!window.YouTabsDB || !window.YouTabsDB.isIndexedDBAvailable()) {
+      console.error('handleFullIndexUpdate: YouTabsDB is not available');
+      return { success: false, error: 'Database not available' };
+    }
+
+    // Ensure database is opened
+    await window.YouTabsDB.openDatabase();
+    
+    // Get URL key for indexing
+    const urlKey = getUrlKey(url);
+    
+    // Get the tab that sent the update
+    let tabs = await browser.tabs.query({ url: url });
+    if (!tabs || tabs.length === 0) {
+      const normalizedUrl = urlKey;
+      tabs = await browser.tabs.query({ url: normalizedUrl });
+    }
+    
+    let tabId = null;
+    if (tabs && tabs.length > 0) {
+      tabId = tabs[0].id;
+    }
+    
+    // Save updated headings to IndexedDB
+    await window.YouTabsDB.savePageHeadingsByUrl(url, tabId, headings);
+    
+    // Update in-memory cache if available
+    if (window.YouTabsCore && window.YouTabsCore.pageHeadings) {
+      window.YouTabsCore.pageHeadings[urlKey] = headings;
+    }
+    
+    console.log('Full index updated:', headings.length, 'headings');
+    return { 
+      success: true, 
+      count: headings.length
+    };
+  } catch (error) {
+    console.error('handleFullIndexUpdate error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Handle adding selected text to index from content script
+async function handleAddTextToIndex(url, text) {
+  try {
+    // Check if YouTabsDB is available
+    if (!window.YouTabsDB || !window.YouTabsDB.isIndexedDBAvailable()) {
+      console.error('handleAddTextToIndex: YouTabsDB is not available');
+      return { success: false, error: 'Database not available' };
+    }
+
+    // Ensure database is opened
+    await window.YouTabsDB.openDatabase();
+    
+    // Get URL key for indexing
+    const urlKey = getUrlKey(url);
+    
+    // Get current page headings from IndexedDB
+    const pageIndexData = await window.YouTabsDB.getPagesIndexByUrl(urlKey);
+    let headings = pageIndexData?.headings;
+    
+    // Validate headings is an array
+    if (!Array.isArray(headings)) {
+      headings = [];
+    }
+    
+    // Add the selected text as a custom heading
+    const customHeading = {
+      id: 'custom-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+      text: text,
+      level: 0, // 0 indicates custom indexed text
+      isCustom: true
+    };
+    
+    headings.push(customHeading);
+    
+    // Get the tab for this URL
+    let tabs = await browser.tabs.query({ url: url });
+    if (!tabs || tabs.length === 0) {
+      const normalizedUrl = urlKey;
+      tabs = await browser.tabs.query({ url: normalizedUrl });
+    }
+    
+    let tabId = null;
+    if (tabs && tabs.length > 0) {
+      tabId = tabs[0].id;
+    }
+    
+    // Save to IndexedDB
+    await window.YouTabsDB.savePageHeadingsByUrl(url, tabId, headings);
+    
+    // Update in-memory cache if available
+    if (window.YouTabsCore && window.YouTabsCore.pageHeadings) {
+      window.YouTabsCore.pageHeadings[urlKey] = headings;
+    }
+    
+    console.log('Added text to index:', text.substring(0, 50));
+    return { success: true, message: 'Text added to indexing' };
+  } catch (error) {
+    console.error('handleAddTextToIndex error:', error);
     return { success: false, error: error.message };
   }
 }

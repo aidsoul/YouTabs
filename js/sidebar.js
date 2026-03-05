@@ -18,6 +18,16 @@ class YouTabsSidebar extends YouTabsCore {
     this.tabsScrollContainer = document.getElementById('tabsScrollContainer');
     this.tabPreview = document.getElementById('tabPreview');
     this.searchInput = document.getElementById('searchInput');
+    
+    // Set DOM elements on UIRenderer
+    if (this.uiRenderer) {
+      this.uiRenderer.setElements({
+        tabsList: this.tabsList,
+        tabCount: this.tabCount,
+        tabsScrollContainer: this.tabsScrollContainer,
+        tabPreview: this.tabPreview
+      });
+    }
     this.searchClear = document.getElementById('searchClear');
     
     // Filter UI elements
@@ -60,28 +70,6 @@ class YouTabsSidebar extends YouTabsCore {
     if (this.createGroupBtn) {
       this.createGroupBtn.addEventListener('click', () => {
         this.createNewGroup();
-      });
-    }
-    
-    // Click on empty area of you-tabs-container to show create group menu
-    const tabsContainer = document.querySelector('.you-tabs-container');
-    if (tabsContainer) {
-      tabsContainer.addEventListener('click', (e) => {
-        const target = e.target;
-        // Don't show menu if clicking on interactive elements
-        if (target.closest('.tab-item') || 
-            target.closest('.tab-group-header') || 
-            target.closest('.tabs-header') ||
-            target.closest('.tab-preview') ||
-            target.tagName === 'INPUT' ||
-            target.tagName === 'BUTTON') {
-          return;
-        }
-        // Hide any existing menu before showing new one
-        this.hideContextMenu();
-        // Show create group menu on click
-        e.preventDefault();
-        this.showEmptyAreaContextMenu(e);
       });
     }
     
