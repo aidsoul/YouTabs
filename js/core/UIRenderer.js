@@ -1522,16 +1522,9 @@ class UIRenderer {
             displayText = displayText.substring(0, 45) + '...';
           }
           
-          // Truncate URL if > 35 chars
-          let displayUrl = result.heading.url || result.pageUrl || '';
-          if (displayUrl.length > 35) {
-            displayUrl = displayUrl.substring(0, 32) + '...';
-          }
-          
           itemContent += `
             <div class="heading-search-item-content">
               <span class="heading-text">${this.escapeHtml(displayText)}</span>
-              <span class="heading-url">${this.escapeHtml(displayUrl)}</span>
             </div>
           `;
           

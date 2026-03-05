@@ -2620,15 +2620,6 @@ body.dark-theme .modal-footer {
   word-break: break-word;
 }
 
-.heading-url {
-  font-size: 11px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-  word-break: break-all;
-  margin-top: 4px;
-  opacity: 0.8;
-}
-
 .heading-tab-info {
   margin-top: 6px;
   padding-left: 28px;
