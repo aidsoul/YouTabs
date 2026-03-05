@@ -18,6 +18,16 @@ class YouTabsPopup extends YouTabsCore {
     this.tabsScrollContainer = document.getElementById('tabsScrollContainer');
     this.tabPreview = document.getElementById('tabPreview');
     this.searchInput = document.getElementById('searchInput');
+    
+    // Set DOM elements on UIRenderer
+    if (this.uiRenderer) {
+      this.uiRenderer.setElements({
+        tabsList: this.tabsList,
+        tabCount: this.tabCount,
+        tabsScrollContainer: this.tabsScrollContainer,
+        tabPreview: this.tabPreview
+      });
+    }
     this.searchClear = document.getElementById('searchClear');
     
     // Filter UI elements

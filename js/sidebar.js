@@ -18,6 +18,16 @@ class YouTabsSidebar extends YouTabsCore {
     this.tabsScrollContainer = document.getElementById('tabsScrollContainer');
     this.tabPreview = document.getElementById('tabPreview');
     this.searchInput = document.getElementById('searchInput');
+    
+    // Set DOM elements on UIRenderer
+    if (this.uiRenderer) {
+      this.uiRenderer.setElements({
+        tabsList: this.tabsList,
+        tabCount: this.tabCount,
+        tabsScrollContainer: this.tabsScrollContainer,
+        tabPreview: this.tabPreview
+      });
+    }
     this.searchClear = document.getElementById('searchClear');
     
     // Filter UI elements
@@ -78,10 +88,14 @@ class YouTabsSidebar extends YouTabsCore {
           return;
         }
         // Hide any existing menu before showing new one
-        this.hideContextMenu();
+        if (this.uiRenderer) {
+          this.uiRenderer.hideContextMenu();
+        }
         // Show create group menu on click
         e.preventDefault();
-        this.showEmptyAreaContextMenu(e);
+        if (this.uiRenderer) {
+          this.uiRenderer.showEmptyAreaContextMenu(e);
+        }
       });
     }
     
