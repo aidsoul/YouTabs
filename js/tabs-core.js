@@ -204,8 +204,16 @@ class YouTabsCore {
     // Configuration options - store in settings for consistency
     this.shouldCloseWindow = options.shouldCloseWindow ?? false;
     
-    // State
-    this.tabs = [];
+    // Initialize TabManager
+    this.tabManager = new TabManager({
+      shouldCloseWindow: this.shouldCloseWindow
+    });
+    
+    // Setup TabManager event listeners
+    this._setupTabManagerListeners();
+    
+    // State - sync with TabManager
+    this.tabs = this.tabManager.getTabs();
     this.filteredTabs = [];
     this.headingSearchResults = [];
     this.activeTabId = null;
@@ -316,6 +324,38 @@ class YouTabsCore {
     this._indexWorker = null;
     this._workerAvailable = true; // Flag to track if worker is available
     this._initIndexWorker();
+  }
+  
+  /**
+   * Setup TabManager event listeners
+   * @private
+   */
+  _setupTabManagerListeners() {
+    // Listen for tabs loaded event to sync state
+    this.tabManager.on('tabsLoaded', ({ tabs, activeTabId }) => {
+      this.tabs = tabs;
+      this.activeTabId = activeTabId;
+      this.renderTabs();
+    });
+    
+    // Listen for tab activation
+    this.tabManager.on('tabActivated', ({ tabId }) => {
+      this.activeTabId = tabId;
+    });
+    
+    // Listen for errors
+    this.tabManager.on('error', ({ action, error }) => {
+      console.error(`TabManager error in ${action}:`, error);
+    });
+  }
+  
+  /**
+   * Handle tabs loaded from TabManager
+   * @private
+   */
+  _onTabsLoaded({ tabs, activeTabId }) {
+    this.tabs = tabs;
+    this.activeTabId = activeTabId;
   }
   
   async init() {
@@ -645,6 +685,11 @@ class YouTabsCore {
   }
   
   cleanup() {
+    // Cleanup TabManager
+    if (this.tabManager) {
+      this.tabManager.destroy();
+    }
+    
     // Remove tab event listeners
     browser.tabs.onUpdated.removeListener(this._boundLoadTabs);
     browser.tabs.onCreated.removeListener(this._boundLoadTabs);
@@ -2508,17 +2553,10 @@ class YouTabsCore {
   }
 
   async loadTabs() {
+    // Delegate to TabManager
     try {
-      const currentWindow = await browser.windows.getCurrent();
-      
-      this.tabs = await browser.tabs.query({
-        windowId: currentWindow.id,
-        windowType: 'normal'
-      });
-      
-      this.activeTabId = this.tabs.find(tab => tab.active)?.id;
-      
-      this.renderTabs();
+      await this.tabManager.loadTabs();
+      // State is synced via event listener
     } catch (error) {
       console.error('Error loading tabs:', error);
     }
@@ -3985,73 +4023,42 @@ class YouTabsCore {
   }
   
   async openSettings() {
-    const currentWindow = await browser.windows.getCurrent();
-    await browser.tabs.create({
-      windowId: currentWindow.id,
-      url: 'settings.html',
-      active: true
+    await this.tabManager.openSettings({
+      closeWindow: this.shouldCloseWindow
     });
-    
-    if (this.shouldCloseWindow) {
-      window.close();
-    }
   }
   
   handleTabClick(e, tab) {
-    if (e.target.closest('.tab-close')) return;
-    
-    browser.tabs.update(tab.id, { active: true });
-    browser.windows.update(tab.windowId, { focused: true });
-    
-    // Update tab usage in group
+    // Update tab usage in group before activation
     const group = this.getCustomGroupForTab(tab.id);
     if (group) {
       this.updateTabUsage(tab.id, group.id);
     }
     
-    if (this.settings.closeOnSelect && this.shouldCloseWindow) {
-      window.close();
-    }
+    // Delegate to TabManager
+    this.tabManager.handleTabClick(e, tab, {
+      closeOnSelect: this.settings.closeOnSelect,
+      shouldCloseWindow: this.shouldCloseWindow
+    });
   }
   
   handleTabClose(e, tab) {
     e.stopPropagation();
-    this.closeTabById(tab.id);
+    this.tabManager.closeTab(tab.id);
   }
   
   async closeTabById(tabId) {
-    try {
-      await browser.tabs.remove(tabId);
-    } catch (error) {
-      console.error('Error closing tab:', error);
-    }
+    return this.tabManager.closeTab(tabId);
   }
   
-  // Refresh all tabs
+  // Refresh all tabs - delegate to TabManager
   async refreshAllTabs() {
-    try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
-      for (const tab of tabs) {
-        if (!tab.pinned) {
-          await browser.tabs.reload(tab.id);
-        }
-      }
-    } catch (error) {
-      console.error('Error refreshing tabs:', error);
-    }
+    return this.tabManager.refreshAllTabs();
   }
   
-  // Close all tabs
+  // Close all tabs - delegate to TabManager
   async closeAllTabs() {
-    try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
-      const tabIds = tabs.map(tab => tab.id);
-      if (tabIds.length > 0) {
-        await browser.tabs.remove(tabIds);
-      }
-    } catch (error) {
-      console.error('Error closing all tabs:', error);
-    }
+    return this.tabManager.closeAllTabs();
   }
   
   // Index all tabs for search
@@ -4112,52 +4119,19 @@ class YouTabsCore {
     }
   }
   
-  // Close other tabs (all except the active one)
+  // Close other tabs (all except the active one) - delegate to TabManager
   async closeOtherTabs() {
-    try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
-      const activeTab = tabs.find(tab => tab.active);
-      if (activeTab) {
-        const otherTabIds = tabs.filter(tab => tab.id !== activeTab.id).map(tab => tab.id);
-        if (otherTabIds.length > 0) {
-          await browser.tabs.remove(otherTabIds);
-        }
-      }
-    } catch (error) {
-      console.error('Error closing other tabs:', error);
-    }
+    return this.tabManager.closeOtherTabs();
   }
   
-  // Close tabs to the left of the active tab
+  // Close tabs to the left of the active tab - delegate to TabManager
   async closeTabsToLeft() {
-    try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
-      const activeTab = tabs.find(tab => tab.active);
-      if (activeTab) {
-        const tabsToClose = tabs.filter(tab => tab.index < activeTab.index && !tab.pinned).map(tab => tab.id);
-        if (tabsToClose.length > 0) {
-          await browser.tabs.remove(tabsToClose);
-        }
-      }
-    } catch (error) {
-      console.error('Error closing tabs to left:', error);
-    }
+    return this.tabManager.closeTabsToLeft();
   }
   
-  // Close tabs to the right of the active tab
+  // Close tabs to the right of the active tab - delegate to TabManager
   async closeTabsToRight() {
-    try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
-      const activeTab = tabs.find(tab => tab.active);
-      if (activeTab) {
-        const tabsToClose = tabs.filter(tab => tab.index > activeTab.index && !tab.pinned).map(tab => tab.id);
-        if (tabsToClose.length > 0) {
-          await browser.tabs.remove(tabsToClose);
-        }
-      }
-    } catch (error) {
-      console.error('Error closing tabs to right:', error);
-    }
+    return this.tabManager.closeTabsToRight();
   }
   
   // Handle tab activation - update usage stats
@@ -4847,28 +4821,16 @@ class YouTabsCore {
   }
   
   async toggleTabMute(tab) {
-    try {
-      await browser.tabs.update(tab.id, { muted: !tab.mutedInfo?.muted });
+    const success = await this.tabManager.toggleMute(tab);
+    if (success) {
       await this.loadTabs();
-    } catch (error) {
-      console.error('Error toggling mute:', error);
     }
   }
   
   async createNewTab() {
-    try {
-      const currentWindow = await browser.windows.getCurrent();
-      await browser.tabs.create({
-        windowId: currentWindow.id,
-        active: true
-      });
-      
-      if (this.shouldCloseWindow) {
-        window.close();
-      }
-    } catch (error) {
-      console.error('Error creating new tab:', error);
-    }
+    await this.tabManager.createNewTab({
+      closeWindow: this.shouldCloseWindow
+    });
   }
   
   showTabPreview(e, tab) {
