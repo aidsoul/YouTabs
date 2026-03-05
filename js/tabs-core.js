@@ -212,21 +212,33 @@ class YouTabsCore {
     // Setup TabManager event listeners
     this._setupTabManagerListeners();
     
+    // Initialize GroupManager
+    this.groupManager = new GroupManager();
+    
+    // Setup GroupManager event listeners
+    this._setupGroupManagerListeners();
+    
+    // Initialize SearchEngine
+    this.searchEngine = new SearchEngine({
+      settings: {},
+      getTabs: () => this.tabs,
+      getCustomTabNames: () => this.customTabNames,
+      getGroupHierarchyNames: (tabId) => this.getGroupHierarchyNames(tabId),
+      onSearchResults: (results) => {
+        // Sync search state from SearchEngine
+        this.filteredTabs = results.filteredTabs;
+        this.headingSearchResults = results.headingResults;
+        this.renderTabs();
+      },
+      onError: (error) => console.error('SearchEngine error:', error)
+    });
+    
     // State - sync with TabManager
     this.tabs = this.tabManager.getTabs();
-    this.filteredTabs = [];
-    this.headingSearchResults = [];
     this.activeTabId = null;
     this.draggedTab = null;
     this.draggedIndex = null;
     this.draggedGroup = null;
-    this.searchQuery = '';
-    
-    // Search filter state
-    this.filterTabs = true;
-    this.filterHeadingTypes = ['heading', 'paragraph', 'link', 'image', 'div', 'ul', 'ol', 'li', 'input', 'video', 'audio', 'iframe', 'span', 'table', 'section', 'article', 'aside', 'nav', 'footer', 'header', 'blockquote', 'code', 'pre', 'cite', 'abbr', 'time', 'mark', 'button', 'textarea', 'select', 'label', 'figure', 'details', 'summary', 'meta', 'aria', 'data'];
-    this.totalFilterTypes = this.filterHeadingTypes.length;
-    this.hasActiveFilter = false;
     
     // Settings manager
     this.settingsManager = getSettingsManager();
@@ -234,50 +246,17 @@ class YouTabsCore {
     // Settings (synced with SettingsManager)
     this.settings = {};
     
-    // Custom user groups
-    this.customGroups = [];
-    
     // Custom tab names (user-renamed tabs)
     this.customTabNames = {}; // { tabId: { customName: string, originalName: string } }
-
-    // Indexed page headings for search
-    this.pageHeadings = {}; // { urlKey: [{ id: string, text: string, level: number, url: string }] }
-    
-    // Mapping from tabId to urlKey for search
-    this.tabIdToUrlKey = {}; // { tabId: urlKey }
-    
-    // Group tab metadata (tracks when tabs were added to groups)
-    this.groupTabMetadata = {}; // { groupId: { tabId: { addedAt: timestamp, lastUsed: timestamp, useCount: number } } }
-    
-    // Available colors for custom groups
-    this.groupColors = [
-      { id: 'red', name: 'Red', color: '#ff5252' },
-      { id: 'orange', name: 'Orange', color: '#ff9800' },
-      { id: 'yellow', name: 'Yellow', color: '#ffc107' },
-      { id: 'green', name: 'Green', color: '#4caf50' },
-      { id: 'blue', name: 'Blue', color: '#2196f3' },
-      { id: 'purple', name: 'Purple', color: '#9c27b0' },
-      { id: 'pink', name: 'Pink', color: '#e91e63' },
-      { id: 'cyan', name: 'Cyan', color: '#00bcd4' }
-    ];
     
     // Debounced loadTabs for performance
     this.debouncedLoadTabs = debounce(() => this.loadTabs(), 100);
-    
-    // Debounced search for performance
-    this._debouncedSetSearchQuery = debounce((query) => this._performSearch(query), 150);
     
     // Track active sort dropdown close handlers for cleanup
     this._activeSortDropdownHandlers = new Set();
     
     // Shared DOMParser instance for reuse (avoid creating in loops)
     this._domParser = new DOMParser();
-    
-    // Cache for group depth calculations
-    this._groupDepthCache = new Map();
-    
-    // Map for O(1) group lookups by ID (rebuilt when groups change)
-    this._groupsById = new Map();
     
     // Bind event listeners for cleanup
     this._boundLoadTabs = () => this.debouncedLoadTabs();
@@ -312,18 +291,8 @@ class YouTabsCore {
     this.modal = null;
     this.modalResolve = null;
     
-    // Throttling for indexing operations
-    this._lastIndexTime = 0;
-    this._indexQueue = [];
-    this._isIndexing = false;
-    
     // Lazy loading state
     this._loadedGroups = new Set(); // Track which groups have been loaded
-    
-    // Web Worker for indexing
-    this._indexWorker = null;
-    this._workerAvailable = true; // Flag to track if worker is available
-    this._initIndexWorker();
   }
   
   /**
@@ -350,6 +319,41 @@ class YouTabsCore {
   }
   
   /**
+   * Setup GroupManager event listeners
+   * @private
+   */
+  _setupGroupManagerListeners() {
+    // Listen for group changes to re-render
+    this.groupManager.on('groupsLoaded', () => {
+      this.renderTabs();
+    });
+    
+    this.groupManager.on('groupCreated', () => {
+      this.renderTabs();
+    });
+    
+    this.groupManager.on('groupUpdated', () => {
+      this.renderTabs();
+    });
+    
+    this.groupManager.on('groupDeleted', () => {
+      this.renderTabs();
+    });
+    
+    this.groupManager.on('tabAddedToGroup', () => {
+      this.renderTabs();
+    });
+    
+    this.groupManager.on('tabRemovedFromGroup', () => {
+      this.renderTabs();
+    });
+    
+    this.groupManager.on('error', ({ action, error }) => {
+      console.error(`GroupManager error in ${action}:`, error);
+    });
+  }
+  
+  /**
    * Handle tabs loaded from TabManager
    * @private
    */
@@ -365,8 +369,8 @@ class YouTabsCore {
     // Update action buttons visibility based on settings
     this.updateActionButtonsVisibility();
     
-    // Load page headings from storage
-    await this.loadPageHeadings();
+    // Load page headings from storage (via SearchEngine)
+    await this.searchEngine.loadPageHeadings();
     
     // Load current window tabs
     await this.loadTabs();
@@ -411,35 +415,80 @@ class YouTabsCore {
     return (days * msPerDay) + (hours * msPerHour) + (minutes * msPerMinute);
   }
   
-  // Initialize the web worker for background indexing
-  _initIndexWorker() {
-    try {
-      this._indexWorker = new Worker('js/indexer-worker.js');
-      
-      this._indexWorker.onmessage = (e) => {
-        const { type, headings, count, error } = e.data;
-        
-        if (type === 'headingsExtracted') {
-          console.log('Worker: extracted', count, 'headings');
-        } else if (type === 'batchProcessed') {
-          console.log('Worker: batch processed');
-        } else if (type === 'error') {
-          console.error('Worker error:', error);
-        }
-      };
-      
-      this._indexWorker.onerror = (error) => {
-        console.error('Index Worker error:', error);
-        this._workerAvailable = false;
-        console.warn('YouTabs: Web Worker unavailable, using synchronous indexing');
-      };
-      
-      console.log('Index Worker initialized');
-    } catch (error) {
-      console.error('Failed to initialize index worker:', error);
-      this._workerAvailable = false;
-      console.warn('YouTabs: Web Worker unavailable, using synchronous indexing');
+  // Property getters/setters for backward compatibility - delegate to SearchEngine
+  get searchQuery() {
+    return this.searchEngine ? this.searchEngine.getSearchQuery() : '';
+  }
+  
+  set searchQuery(value) {
+    if (this.searchEngine) {
+      this.searchEngine.searchQuery = value;
     }
+  }
+  
+  get filteredTabs() {
+    return this.searchEngine ? this.searchEngine.getFilteredTabs() : [];
+  }
+  
+  set filteredTabs(value) {
+    if (this.searchEngine) {
+      this.searchEngine.filteredTabs = value;
+    }
+  }
+  
+  get headingSearchResults() {
+    return this.searchEngine ? this.searchEngine.getHeadingSearchResults() : [];
+  }
+  
+  set headingSearchResults(value) {
+    if (this.searchEngine) {
+      this.searchEngine.headingSearchResults = value;
+    }
+  }
+  
+  get filterTabs() {
+    return this.searchEngine ? this.searchEngine.filterTabs : true;
+  }
+  
+  set filterTabs(value) {
+    if (this.searchEngine) {
+      this.searchEngine.filterTabs = value;
+    }
+  }
+  
+  get filterHeadingTypes() {
+    return this.searchEngine ? this.searchEngine.filterHeadingTypes : [];
+  }
+  
+  set filterHeadingTypes(value) {
+    if (this.searchEngine) {
+      this.searchEngine.filterHeadingTypes = value;
+    }
+  }
+  
+  get hasActiveFilter() {
+    return this.searchEngine ? this.searchEngine.hasActiveFilter : false;
+  }
+  
+  set hasActiveFilter(value) {
+    if (this.searchEngine) {
+      this.searchEngine.hasActiveFilter = value;
+    }
+  }
+  
+  get pageHeadings() {
+    return this.searchEngine ? this.searchEngine.pageHeadings : {};
+  }
+  
+  set pageHeadings(value) {
+    if (this.searchEngine) {
+      this.searchEngine.pageHeadings = value;
+    }
+  }
+  
+  // Get a URL key for indexing - delegate to SearchEngine
+  getUrlKey(url) {
+    return this.searchEngine ? this.searchEngine.getUrlKey(url) : url;
   }
   
   // Clean up expired page headings from IndexedDB
@@ -690,6 +739,11 @@ class YouTabsCore {
       this.tabManager.destroy();
     }
     
+    // Cleanup GroupManager
+    if (this.groupManager) {
+      this.groupManager.destroy();
+    }
+    
     // Remove tab event listeners
     browser.tabs.onUpdated.removeListener(this._boundLoadTabs);
     browser.tabs.onCreated.removeListener(this._boundLoadTabs);
@@ -849,7 +903,7 @@ class YouTabsCore {
     menu.appendChild(divider);
     
     // Add to group submenu
-    if (this.customGroups.length > 0) {
+    if (this.groupManager.customGroups.length > 0) {
       // Show "Add to group" with submenu when there are existing groups
       const addToGroupItem = document.createElement('div');
       addToGroupItem.className = 'context-menu-item has-submenu';
@@ -914,7 +968,7 @@ class YouTabsCore {
       groupsContainer.className = 'context-menu-groups-container';
       
       // Sort groups: root groups first, then by depth
-      const sortedGroups = [...this.customGroups].sort((a, b) => {
+      const sortedGroups = [...this.groupManager.customGroups].sort((a, b) => {
         const depthA = this.getGroupDepth(a.id);
         const depthB = this.getGroupDepth(b.id);
         if (depthA !== depthB) return depthA - depthB;
@@ -1120,7 +1174,7 @@ class YouTabsCore {
     menu.className = 'context-menu';
     
     // Check if this is a nested group (has parent)
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this.groupManager._getGroupById(groupId);
     const isNested = group && group.parentId;
     
     // Rename option
@@ -1276,44 +1330,10 @@ class YouTabsCore {
         await window.YouTabsDB.openDatabase();
         await window.YouTabsDB.migrateFromLocalStorage();
         await window.YouTabsDB.migrateFromYouTabsHeadings();
-        
-        // Load custom groups from IndexedDB
-        const storedGroups = await window.YouTabsDB.getCustomGroups();
-        if (storedGroups && storedGroups.length > 0) {
-          this.customGroups = storedGroups.map(group => ({
-            ...group,
-            sortBy: group.sortBy || 'addedAt',
-            sortOrder: group.sortOrder || 'desc'
-          }));
-        }
-        
-        // Build groups lookup Map for O(1) access
-        this._rebuildGroupsMap();
-        
-        // Load group tab metadata from IndexedDB
-        const storedGroupTabMeta = await window.YouTabsDB.getGroupTabMetadata();
-        if (storedGroupTabMeta && Object.keys(storedGroupTabMeta).length > 0) {
-          this.groupTabMetadata = storedGroupTabMeta;
-        }
-      } else {
-        // Fallback to localStorage if IndexedDB is not available
-        const storedGroups = await browser.storage.local.get('customGroups');
-        if (storedGroups.customGroups) {
-          this.customGroups = storedGroups.customGroups.map(group => ({
-            ...group,
-            sortBy: group.sortBy || 'addedAt',
-            sortOrder: group.sortOrder || 'desc'
-          }));
-        }
-        
-        // Build groups lookup Map for O(1) access
-        this._rebuildGroupsMap();
-        
-        const storedGroupTabMeta = await browser.storage.local.get('groupTabMetadata');
-        if (storedGroupTabMeta.groupTabMetadata) {
-          this.groupTabMetadata = storedGroupTabMeta.groupTabMetadata;
-        }
       }
+      
+      // Load groups via GroupManager
+      await this.groupManager.loadGroups();
       
       // Load custom tab names
       const storedTabNames = await browser.storage.local.get('customTabNames');
@@ -1331,36 +1351,21 @@ class YouTabsCore {
   // Save custom groups to storage
   async saveCustomGroups() {
     try {
-      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
-        await window.YouTabsDB.saveCustomGroups(this.customGroups);
-      } else {
-        // Fallback to localStorage if IndexedDB is not available
-        await browser.storage.local.set({
-          customGroups: this.customGroups
-        });
-      }
-      
-      // Clear depth cache since group structure may have changed
-      this.clearGroupDepthCache();
-      
-      // Rebuild groups lookup Map
-      this._rebuildGroupsMap();
+      // Delegate to GroupManager
+      await this.groupManager.saveCustomGroups();
     } catch (error) {
       console.error('Error saving custom groups:', error);
     }
   }
   
-  // Rebuild the groups lookup Map for O(1) access by ID
+  // Rebuild the groups lookup Map for O(1) access by ID - delegated to GroupManager
   _rebuildGroupsMap() {
-    this._groupsById.clear();
-    for (const group of this.customGroups) {
-      this._groupsById.set(group.id, group);
-    }
+    return this.groupManager._rebuildGroupsMap();
   }
   
-  // Get group by ID with O(1) lookup
+  // Get group by ID with O(1) lookup - delegated to GroupManager
   _getGroupById(groupId) {
-    return this._groupsById.get(groupId);
+    return this.groupManager._getGroupById(groupId);
   }
   
   // Save custom tab names to storage
@@ -1374,29 +1379,9 @@ class YouTabsCore {
     }
   }
   
-  // Save group tab metadata to storage (debounced)
-  _saveMetadataTimeout = null;
-  
+  // Save group tab metadata to storage (debounced) - delegated to GroupManager
   async saveGroupTabMetadata() {
-    if (this._saveMetadataTimeout) {
-      clearTimeout(this._saveMetadataTimeout);
-    }
-    
-    this._saveMetadataTimeout = setTimeout(async () => {
-      try {
-        if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
-          await window.YouTabsDB.saveGroupTabMetadata(this.groupTabMetadata);
-        } else {
-          // Fallback to localStorage if IndexedDB is not available
-          await browser.storage.local.set({
-            groupTabMetadata: this.groupTabMetadata
-          });
-        }
-      } catch (error) {
-        console.error('Error saving group tab metadata:', error);
-      }
-      this._saveMetadataTimeout = null;
-    }, 1000); // Debounce for 1 second
+    return this.groupManager.saveGroupTabMetadata();
   }
   
   // Set custom name for a tab
@@ -1442,296 +1427,109 @@ class YouTabsCore {
     return tab.title || 'New tab';
   }
   
-  // Clean up duplicate tabs - ensure each tab is only in one group
+  // Clean up duplicate tabs - ensure each tab is only in one group - delegated to GroupManager
   async cleanupDuplicateTabs() {
-    const tabIdsInGroups = new Map(); // tabId -> first group it appears in
-    
-    for (const group of this.customGroups) {
-      const uniqueTabIds = [];
-      for (const tabId of group.tabIds) {
-        const numericId = Number(tabId);
-        if (!tabIdsInGroups.has(numericId)) {
-          tabIdsInGroups.set(numericId, group.id);
-          uniqueTabIds.push(numericId);
-        }
-      }
-      group.tabIds = uniqueTabIds;
-    }
-    
-    await this.saveCustomGroups();
+    return this.groupManager.cleanupDuplicateTabs();
   }
   
-  // Create a new custom group
+  // Create a new custom group - delegated to GroupManager
   async createCustomGroup(name, color = 'blue', parentId = null) {
-    // Check nesting level if parent is specified
-    if (parentId) {
-      const depth = this.getGroupDepth(parentId);
-      if (depth >= 3) {
-        console.warn('Maximum nesting level (3) reached');
-        return null;
-      }
+    const newGroup = await this.groupManager.createCustomGroup(name, color, parentId);
+    if (newGroup) {
+      this.renderTabs();
     }
-    
-    const newGroup = {
-      id: 'group_' + Date.now(),
-      name: name,
-      color: color,
-      tabIds: [],
-      parentId: parentId,
-      createdAt: Date.now(),
-      sortBy: 'addedAt', // addedAt, lastAccessed, useCount, title, url
-      sortOrder: 'desc' // asc, desc
-    };
-    this.customGroups.push(newGroup);
-    await this.saveCustomGroups();
-    this.renderTabs();
     return newGroup;
   }
   
-  // Get nesting depth of a group (with memoization)
-  getGroupDepth(groupId, depth = 0) {
-    // Check cache first
-    if (this._groupDepthCache.has(groupId)) {
-      return this._groupDepthCache.get(groupId);
-    }
-    
-    const group = this._getGroupById(groupId);
-    if (!group || !group.parentId) {
-      this._groupDepthCache.set(groupId, depth);
-      return depth;
-    }
-    
-    const result = this.getGroupDepth(group.parentId, depth + 1);
-    this._groupDepthCache.set(groupId, result);
-    return result;
+  // Get nesting depth of a group (with memoization) - delegated to GroupManager
+  getGroupDepth(groupId) {
+    return this.groupManager.getGroupDepth(groupId);
   }
   
-  // Clear depth cache when groups are modified
+  // Clear depth cache when groups are modified - delegated to GroupManager
   clearGroupDepthCache() {
-    this._groupDepthCache.clear();
+    return this.groupManager.clearGroupDepthCache();
   }
   
-  // Get all subgroups (children) of a group
+  // Get all subgroups (children) of a group - delegated to GroupManager
   getSubgroups(parentId) {
-    return this.customGroups.filter(g => g.parentId === parentId);
+    return this.groupManager.getSubgroups(parentId);
   }
   
-  // Get root groups (no parent)
+  // Get root groups (no parent) - delegated to GroupManager
   getRootGroups() {
-    return this.customGroups.filter(g => !g.parentId);
+    return this.groupManager.getRootGroups();
   }
   
-  // Get total tabs count in all nested groups (descendants)
+  // Get total tabs count in all nested groups (descendants) - delegated to GroupManager
   getNestedTabsCount(groupId) {
-    const subgroups = this.getSubgroups(groupId);
-    let count = 0;
-    for (const subgroup of subgroups) {
-      count += subgroup.tabIds.length; // tabs in this subgroup
-      count += this.getNestedTabsCount(subgroup.id); // tabs in nested subgroups
-    }
-    return count;
+    return this.groupManager.getNestedTabsCount(groupId);
   }
   
-  // Rename a custom group
+  // Rename a custom group - delegated to GroupManager
   async renameCustomGroup(groupId, newName) {
-    const group = this._getGroupById(groupId);
-    if (group) {
-      group.name = newName;
-      await this.saveCustomGroups();
-      this.renderTabs();
-    }
-  }
-  
-  // Update group color
-  async updateCustomGroupColor(groupId, newColor) {
-    const group = this._getGroupById(groupId);
-    if (group) {
-      group.color = newColor;
-      await this.saveCustomGroups();
-      this.renderTabs();
-    }
-  }
-  
-  // Delete a custom group and all its subgroups
-  async deleteCustomGroup(groupId) {
-    // Helper function to get all descendant group IDs
-    const getAllDescendantIds = (parentId) => {
-      const children = this.customGroups.filter(g => g.parentId === parentId);
-      let ids = children.map(g => g.id);
-      children.forEach(child => {
-        ids = ids.concat(getAllDescendantIds(child.id));
-      });
-      return ids;
-    };
-    
-    // Get all group IDs to delete (including subgroups)
-    const idsToDelete = [groupId, ...getAllDescendantIds(groupId)];
-    
-    this.customGroups = this.customGroups.filter(g => !idsToDelete.includes(g.id));
-    await this.saveCustomGroups();
+    await this.groupManager.renameCustomGroup(groupId, newName);
     this.renderTabs();
   }
   
-  // Add tab to custom group (removes from other groups)
+  // Update group color - delegated to GroupManager
+  async updateCustomGroupColor(groupId, newColor) {
+    await this.groupManager.updateCustomGroupColor(groupId, newColor);
+    this.renderTabs();
+  }
+  
+  // Delete a custom group and all its subgroups - delegated to GroupManager
+  async deleteCustomGroup(groupId) {
+    await this.groupManager.deleteCustomGroup(groupId);
+    this.renderTabs();
+  }
+  
+  // Add tab to custom group (removes from other groups) - delegated to GroupManager
   async addTabToGroup(tabId, groupId) {
-    const group = this._getGroupById(groupId);
-    // Convert tabId to number for comparison
-    const numericTabId = Number(tabId);
-    
-    if (group) {
-      // Check if already in this group
-      if (group.tabIds.includes(numericTabId)) {
-        return; // Already in this group
-      }
-      
-      // Remove from other groups (tabs can only be in one group)
-      for (const g of this.customGroups) {
-        if (g.id !== groupId) {
-          g.tabIds = g.tabIds.filter(id => Number(id) !== numericTabId);
-        }
-      }
-      
-      group.tabIds.push(numericTabId);
-      
-      // Track when tab was added to group
-      if (!this.groupTabMetadata[groupId]) {
-        this.groupTabMetadata[groupId] = {};
-      }
-      if (!this.groupTabMetadata[groupId][numericTabId]) {
-        this.groupTabMetadata[groupId][numericTabId] = {
-          addedAt: Date.now(),
-          lastUsed: Date.now(),
-          useCount: 0
-        };
-      } else {
-        // Update addedAt if re-adding
-        this.groupTabMetadata[groupId][numericTabId].addedAt = Date.now();
-      }
-      
-      await this.saveCustomGroups();
-      await this.saveGroupTabMetadata();
-      this.renderTabs();
-    }
+    await this.groupManager.addTabToGroup(tabId, groupId);
+    this.renderTabs();
   }
   
-  // Remove tab from custom group
+  // Remove tab from custom group - delegated to GroupManager
   async removeTabFromGroup(tabId, groupId) {
-    const group = this._getGroupById(groupId);
-    if (group) {
-      // Convert to number for comparison
-      const numericTabId = Number(tabId);
-      group.tabIds = group.tabIds.filter(id => Number(id) !== numericTabId);
-      await this.saveCustomGroups();
-      this.renderTabs();
-    }
+    await this.groupManager.removeTabFromGroup(tabId, groupId);
+    this.renderTabs();
   }
   
-  // Get custom group for a tab (optimized with early exit)
+  // Get custom group for a tab (optimized with early exit) - delegated to GroupManager
   getCustomGroupForTab(tabId) {
-    const numericTabId = Number(tabId);
-    for (const group of this.customGroups) {
-      if (group.tabIds.some(id => Number(id) === numericTabId)) {
-        return group;
-      }
-    }
-    return undefined;
+    return this.groupManager.getCustomGroupForTab(tabId);
   }
   
-  // Get all tabs in a custom group
+  // Get all tabs in a custom group - delegated to GroupManager
   getTabsInCustomGroup(groupId) {
-    const group = this._getGroupById(groupId);
-    if (!group) return [];
-    return this.tabs.filter(tab => group.tabIds.some(id => Number(id) === tab.id));
+    return this.groupManager.getTabsInCustomGroup(groupId, this.tabs);
   }
   
-  // Get sorted tabs in a custom group
+  // Get sorted tabs in a custom group - delegated to GroupManager
   getSortedTabsInGroup(groupId) {
-    const group = this._getGroupById(groupId);
-    if (!group) return [];
-    
-    const tabsInGroup = this.tabs.filter(tab => group.tabIds.some(id => Number(id) === tab.id));
-    const sortBy = group.sortBy || 'addedAt';
-    const sortOrder = group.sortOrder || 'desc';
-    
-    return this.sortTabs(tabsInGroup, groupId, sortBy, sortOrder);
+    return this.groupManager.getSortedTabsInGroup(groupId, this.tabs);
   }
   
-  // Sort tabs based on criteria
+  // Sort tabs based on criteria - delegated to GroupManager
   sortTabs(tabs, groupId, sortBy, sortOrder) {
-    const metadata = this.groupTabMetadata[groupId] || {};
-    
-    const sortedTabs = [...tabs].sort((a, b) => {
-      let valueA, valueB;
-      
-      switch (sortBy) {
-        case 'addedAt':
-          // Date added to group
-          valueA = metadata[a.id]?.addedAt || 0;
-          valueB = metadata[b.id]?.addedAt || 0;
-          break;
-        case 'lastAccessed':
-          // Last accessed (from browser)
-          valueA = a.lastAccessed || 0;
-          valueB = b.lastAccessed || 0;
-          break;
-        case 'useCount':
-          // Frequency of use
-          valueA = metadata[a.id]?.useCount || 0;
-          valueB = metadata[b.id]?.useCount || 0;
-          break;
-        case 'title':
-          // Tab title
-          valueA = (a.title || '').toLowerCase();
-          valueB = (b.title || '').toLowerCase();
-          return sortOrder === 'asc' ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
-        case 'url':
-          // Tab URL
-          valueA = (a.url || '').toLowerCase();
-          valueB = (b.url || '').toLowerCase();
-          return sortOrder === 'asc' ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
-        default:
-          valueA = metadata[a.id]?.addedAt || 0;
-          valueB = metadata[b.id]?.addedAt || 0;
-      }
-      
-      if (sortOrder === 'asc') {
-        return valueA - valueB;
-      } else {
-        return valueB - valueA;
-      }
-    });
-    
-    return sortedTabs;
+    return this.groupManager.sortTabs(tabs, groupId, sortBy, sortOrder);
   }
   
-  // Update group sorting settings
+  // Update group sorting settings - delegated to GroupManager
   async updateGroupSorting(groupId, sortBy, sortOrder) {
-    const group = this._getGroupById(groupId);
-    if (group) {
-      group.sortBy = sortBy;
-      group.sortOrder = sortOrder;
-      await this.saveCustomGroups();
-      this.renderTabs();
-    }
+    await this.groupManager.updateGroupSorting(groupId, sortBy, sortOrder);
+    this.renderTabs();
   }
   
-  // Update tab usage when tab is activated
+  // Update tab usage when tab is activated - delegated to GroupManager
   async updateTabUsage(tabId, groupId) {
-    const numericTabId = Number(tabId);
-    if (!this.groupTabMetadata[groupId] || !this.groupTabMetadata[groupId][numericTabId]) {
-      return;
-    }
-    
-    this.groupTabMetadata[groupId][numericTabId].lastUsed = Date.now();
-    this.groupTabMetadata[groupId][numericTabId].useCount = 
-      (this.groupTabMetadata[groupId][numericTabId].useCount || 0) + 1;
-    
-    await this.saveGroupTabMetadata();
+    await this.groupManager.updateTabUsage(tabId, groupId);
   }
   
   // Show rename group dialog
   async showRenameGroupDialog(groupId) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this.groupManager._getGroupById(groupId);
     if (!group) return;
     
     const newName = await this.showPrompt('Rename Group', 'Enter new group name:', group.name);
@@ -1752,7 +1550,7 @@ class YouTabsCore {
     picker.className = 'color-picker-dropdown modern-picker';
     
     // Get current color
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this.groupManager._getGroupById(groupId);
     const currentColor = group?.color || '#2196f3';
     const currentHsl = this.hexToHsl(currentColor);
     
@@ -1867,7 +1665,7 @@ class YouTabsCore {
     const quickColors = document.createElement('div');
     quickColors.className = 'color-quick-select';
     
-    this.groupColors.forEach(color => {
+    this.groupManager.groupColors.forEach(color => {
       const colorBtn = document.createElement('button');
       colorBtn.className = 'color-picker-btn';
       colorBtn.style.backgroundColor = color.color;
@@ -1905,11 +1703,11 @@ class YouTabsCore {
   
   // Confirm delete group
   async confirmDeleteGroup(groupId) {
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this.groupManager._getGroupById(groupId);
     if (!group) return;
     
     const tabCount = group.tabIds.length;
-    const message = tabCount > 0 
+    const message = tabCount > 0
       ? `Delete group "${group.name}" and all ${tabCount} tabs in it?`
       : `Delete group "${group.name}"?`;
     
@@ -1987,8 +1785,8 @@ class YouTabsCore {
       }
       
       const sourceGroupId = this.draggedGroup.replace('custom_', '');
-      const sourceGroup = this.customGroups.find(g => g.id === sourceGroupId);
-      
+      const sourceGroup = this.groupManager._getGroupById(sourceGroupId);
+
       if (!sourceGroup) {
         this.cleanupDrag();
         return;
@@ -1996,7 +1794,7 @@ class YouTabsCore {
       
       // Prevent dropping a group onto itself or its descendants
       const isDescendant = (parentId, childId) => {
-        const child = this.customGroups.find(g => g.id === childId);
+        const child = this.groupManager._getGroupById(childId);
         if (!child) return false;
         if (child.parentId === parentId) return true;
         return isDescendant(parentId, child.parentId);
@@ -2203,14 +2001,14 @@ class YouTabsCore {
     const targetGroupId = targetGroupKey.replace('custom_', '');
     
     // Find the groups
-    const sourceGroup = this.customGroups.find(g => g.id === sourceGroupId);
-    const targetGroup = this.customGroups.find(g => g.id === targetGroupId);
+    const sourceGroup = this.groupManager._getGroupById(sourceGroupId);
+    const targetGroup = this.groupManager._getGroupById(targetGroupId);
     
     if (!sourceGroup || !targetGroup) return;
     
     // Prevent dropping a group onto itself or its descendants
     const isDescendant = (parentId, childId) => {
-      const child = this.customGroups.find(g => g.id === childId);
+      const child = this.groupManager._getGroupById(childId);
       if (!child) return false;
       if (child.parentId === parentId) return true;
       return isDescendant(parentId, child.parentId);
@@ -2270,59 +2068,14 @@ class YouTabsCore {
   }
   
   
-  // Convert hex to HSL
+  // Convert hex to HSL - delegated to GroupManager
   hexToHsl(hex) {
-    let r = 0, g = 0, b = 0;
-    if (hex.length === 4) {
-      r = parseInt(hex[1] + hex[1], 16);
-      g = parseInt(hex[2] + hex[2], 16);
-      b = parseInt(hex[3] + hex[3], 16);
-    } else if (hex.length === 7) {
-      r = parseInt(hex.slice(1, 3), 16);
-      g = parseInt(hex.slice(3, 5), 16);
-      b = parseInt(hex.slice(5, 7), 16);
-    }
-    r /= 255;
-    g /= 255;
-    b /= 255;
-    const cmin = Math.min(r, g, b),
-      cmax = Math.max(r, g, b),
-      delta = cmax - cmin;
-    let h = 0, s = 0, l = 0;
-    if (delta === 0) h = 0;
-    else if (cmax === r) h = ((g - b) / delta) % 6;
-    else if (cmax === g) h = (b - r) / delta + 2;
-    else h = (r - g) / delta + 4;
-    h = Math.round(h * 60);
-    if (h < 0) h += 360;
-    l = (cmax + cmin) / 2;
-    s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
-    s = +(s * 100).toFixed(1);
-    l = +(l * 100).toFixed(1);
-    return { h, s, l };
+    return this.groupManager.hexToHsl(hex);
   }
   
-  // Convert HSL to hex
+  // Convert HSL to hex - delegated to GroupManager
   hslToHex(h, s, l) {
-    s /= 100;
-    l /= 100;
-    let c = (1 - Math.abs(2 * l - 1)) * s,
-      x = c * (1 - Math.abs((h / 60) % 2 - 1)),
-      m = l - c / 2,
-      r = 0, g = 0, b = 0;
-    if (0 <= h && h < 60) { r = c; g = x; b = 0; }
-    else if (60 <= h && h < 120) { r = x; g = c; b = 0; }
-    else if (120 <= h && h < 180) { r = 0; g = c; b = x; }
-    else if (180 <= h && h < 240) { r = 0; g = x; b = c; }
-    else if (240 <= h && h < 300) { r = x; g = 0; b = c; }
-    else if (300 <= h && h < 360) { r = c; g = 0; b = x; }
-    r = Math.round((r + m) * 255).toString(16);
-    g = Math.round((g + m) * 255).toString(16);
-    b = Math.round((b + m) * 255).toString(16);
-    if (r.length === 1) r = '0' + r;
-    if (g.length === 1) g = '0' + g;
-    if (b.length === 1) b = '0' + b;
-    return '#' + r + g + b;
+    return this.groupManager.hslToHex(h, s, l);
   }
   
   // Open color picker in separate window
@@ -2334,7 +2087,7 @@ class YouTabsCore {
     }
     
     // Get current color
-    const group = this.customGroups.find(g => g.id === groupId);
+    const group = this.groupManager._getGroupById(groupId);
     const currentColor = group?.color || '#2196f3';
     const currentHsl = this.hexToHsl(currentColor);
     
@@ -2436,7 +2189,7 @@ class YouTabsCore {
     
     const quickColors = document.createElement('div');
     quickColors.className = 'color-quick-grid';
-    this.groupColors.forEach(color => {
+    this.groupManager.groupColors.forEach(color => {
       const btn = document.createElement('button');
       btn.className = 'color-quick-btn';
       btn.style.backgroundColor = color.color;
@@ -2875,7 +2628,7 @@ class YouTabsCore {
     
     // Get ungrouped tabs (tabs not in any custom group)
     const groupedTabIds = new Set();
-    this.customGroups.forEach(group => {
+    this.groupManager.customGroups.forEach(group => {
       group.tabIds.forEach(id => groupedTabIds.add(Number(id)));
     });
     
@@ -2890,9 +2643,9 @@ class YouTabsCore {
     
     // Add custom groups - first root groups, then their subgroups recursively
     const addGroupsRecursively = (parentId, depth) => {
-      const groups = parentId 
-        ? this.customGroups.filter(g => g.parentId === parentId)
-        : this.customGroups.filter(g => !g.parentId);
+      const groups = parentId
+        ? this.groupManager.customGroups.filter(g => g.parentId === parentId)
+        : this.groupManager.customGroups.filter(g => !g.parentId);
       
       groups.forEach(group => {
         const groupKey = 'custom_' + group.id;
@@ -2912,7 +2665,7 @@ class YouTabsCore {
       });
     };
     
-    if (this.customGroups.length > 0) {
+    if (this.groupManager.customGroups.length > 0) {
       addGroupsRecursively(null, 0);
     }
     
@@ -2940,7 +2693,7 @@ class YouTabsCore {
             parentCollapsed = true;
             break;
           }
-          const parent = this.customGroups.find(g => g.id === parentId);
+          const parent = this.groupManager._getGroupById(parentId);
           parentId = parent?.parentId;
         }
       }
@@ -3103,7 +2856,7 @@ class YouTabsCore {
               option.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const sortBy = option.dataset.sort;
-                const group = this.customGroups.find(g => g.id === groupInfo.groupId);
+                const group = this.groupManager._getGroupById(groupInfo.groupId);
                 const sortOrder = group?.sortOrder || 'desc';
                 await this.updateGroupSorting(groupInfo.groupId, sortBy, sortOrder);
                 sortDropdown.style.display = 'none';
@@ -3114,7 +2867,7 @@ class YouTabsCore {
               option.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const sortOrder = option.dataset.order;
-                const group = this.customGroups.find(g => g.id === groupInfo.groupId);
+                const group = this.groupManager._getGroupById(groupInfo.groupId);
                 const sortBy = group?.sortBy || 'addedAt';
                 await this.updateGroupSorting(groupInfo.groupId, sortBy, sortOrder);
                 sortDropdown.style.display = 'none';
@@ -3174,8 +2927,8 @@ class YouTabsCore {
             }
             
             const sourceGroupId = this.draggedGroup.replace('custom_', '');
-            const sourceGroup = this.customGroups.find(g => g.id === sourceGroupId);
-            
+            const sourceGroup = this.groupManager._getGroupById(sourceGroupId);
+
             if (!sourceGroup) {
               this.cleanupDrag();
               return;
@@ -3183,7 +2936,7 @@ class YouTabsCore {
             
             // Prevent dropping a group onto itself or its descendants
             const isDescendant = (parentId, childId) => {
-              const child = this.customGroups.find(g => g.id === childId);
+              const child = this.groupManager._getGroupById(childId);
               if (!child) return false;
               if (child.parentId === parentId) return true;
               return isDescendant(parentId, child.parentId);
@@ -3258,83 +3011,8 @@ class YouTabsCore {
   }
   
   getGroupInfo(groupKey, group) {
-    // Helper function to darken a hex color
-    const darkenColor = (hex, percent) => {
-      const num = parseInt(hex.replace('#', ''), 16);
-      const amt = Math.round(2.55 * percent);
-      const R = (num >> 16) - amt;
-      const G = (num >> 8 & 0x00FF) - amt;
-      const B = (num & 0x0000FF) - amt;
-      return '#' + (
-        0x1000000 +
-        (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
-        (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
-        (B < 255 ? (B < 1 ? 0 : B) : 255)
-      ).toString(16).slice(1);
-    };
-    
-    // Check if it's a custom group
-    if (groupKey.startsWith('custom_')) {
-      const groupId = groupKey.replace('custom_', '');
-      const customGroup = this.customGroups.find(g => g.id === groupId);
-      if (customGroup) {
-        // Get depth and find root parent's color
-        let depth = this.getGroupDepth(groupId);
-        let rootColorId = customGroup.color;
-        
-        // If nested, find the root parent's color
-        if (customGroup.parentId) {
-          let parent = this.customGroups.find(g => g.id === customGroup.parentId);
-          while (parent && parent.parentId) {
-            parent = this.customGroups.find(g => g.id === parent.parentId);
-          }
-          if (parent) {
-            rootColorId = parent.color;
-          }
-        }
-        
-        // Get color - handle both color ID (red, blue) and hex color (#ff5252)
-        let displayColor;
-        const colorObj = this.groupColors.find(c => c.id === rootColorId);
-        if (colorObj) {
-          displayColor = colorObj.color;
-        } else if (rootColorId && rootColorId.startsWith('#')) {
-          // Handle hex color from color picker
-          displayColor = rootColorId;
-        } else {
-          // Fallback to default blue
-          displayColor = this.groupColors[4].color;
-        }
-        
-        // Darken color based on nesting depth
-        if (depth > 0) {
-          displayColor = darkenColor(displayColor, depth * 15);
-        }
-        
-        return {
-          name: customGroup.name,
-          icon: '●',
-          color: displayColor,
-          isCustom: true,
-          groupId: customGroup.id,
-          subgroupCount: this.getSubgroups(groupId).length,
-          nestedTabsCount: this.getNestedTabsCount(groupId),
-          sortBy: customGroup.sortBy || 'addedAt',
-          sortOrder: customGroup.sortOrder || 'desc'
-        };
-      }
-    }
-    
-    // Check if it's ungrouped
-    if (groupKey === 'ungrouped') {
-      return {
-        name: 'All tabs',
-        icon: '',
-        color: 'var(--text-secondary)',
-        isCustom: false
-      };
-    }
-
+    // Delegate to GroupManager
+    return this.groupManager.getGroupInfo(groupKey, group);
   }
   
   toggleGroupCollapse(groupKey, groupContainer) {
@@ -3430,7 +3108,7 @@ class YouTabsCore {
     const parentId = parentGroupKey.replace('custom_', '');
     
     // Find all child groups
-    const childGroups = this.customGroups.filter(g => g.parentId === parentId);
+    const childGroups = this.groupManager.customGroups.filter(g => g.parentId === parentId);
     
     childGroups.forEach(child => {
       const childKey = 'custom_' + child.id;
@@ -3458,7 +3136,7 @@ class YouTabsCore {
     const parentId = parentGroupKey.replace('custom_', '');
     
     // Find all child groups
-    const childGroups = this.customGroups.filter(g => g.parentId === parentId);
+    const childGroups = this.groupManager.customGroups.filter(g => g.parentId === parentId);
     
     childGroups.forEach(child => {
       const childKey = 'custom_' + child.id;
@@ -3517,7 +3195,7 @@ class YouTabsCore {
     
     // Get IDs of tabs that are in custom groups
     const tabsInCustomGroups = new Set();
-    this.customGroups.forEach(group => {
+    this.groupManager.customGroups.forEach(group => {
       group.tabIds.forEach(id => tabsInCustomGroups.add(Number(id)));
     });
     
@@ -3558,7 +3236,7 @@ class YouTabsCore {
     
     // Get IDs of tabs that are in custom groups
     const tabsInCustomGroups = new Set();
-    this.customGroups.forEach(group => {
+    this.groupManager.customGroups.forEach(group => {
       group.tabIds.forEach(id => tabsInCustomGroups.add(Number(id)));
     });
     
@@ -3626,7 +3304,7 @@ class YouTabsCore {
     
     // Get IDs of tabs that are in custom groups
     const tabsInCustomGroups = new Set();
-    this.customGroups.forEach(group => {
+    this.groupManager.customGroups.forEach(group => {
       group.tabIds.forEach(id => tabsInCustomGroups.add(Number(id)));
     });
     
@@ -3672,14 +3350,14 @@ class YouTabsCore {
     const groups = {};
     
     // First, add all custom groups
-    this.customGroups.forEach(group => {
+    this.groupManager.customGroups.forEach(group => {
       const groupKey = 'custom_' + group.id;
       groups[groupKey] = this.tabs.filter(tab => group.tabIds.some(id => Number(id) === tab.id));
     });
     
     // Add ungrouped tabs
     const groupedTabIds = new Set();
-    this.customGroups.forEach(group => {
+    this.groupManager.customGroups.forEach(group => {
       group.tabIds.forEach(id => groupedTabIds.add(Number(id)));
     });
     
@@ -3979,7 +3657,7 @@ class YouTabsCore {
           const data = JSON.parse(e.dataTransfer.getData('text/plain') || '{}');
           if (data.type === 'group' && data.groupKey) {
             const groupId = data.groupKey.replace('custom_', '');
-            const group = this.customGroups.find(g => g.id === groupId);
+            const group = this.groupManager._getGroupById(groupId);
             
             if (group && group.parentId) {
               // Make it a root-level group
@@ -4061,62 +3739,15 @@ class YouTabsCore {
     return this.tabManager.closeAllTabs();
   }
   
-  // Index all tabs for search
+  // Index all tabs for search - delegate to SearchEngine
   async indexAllTabs() {
-    try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
-      console.log('Indexing all tabs:', tabs.length);
-      for (const tab of tabs) {
-        // Skip URLs that can't be indexed
-        if (tab.id && tab.url && 
-            !tab.url.startsWith('about:') && 
-            !tab.url.startsWith('chrome:') &&
-            !tab.url.startsWith('moz-extension:') &&
-            !tab.url.startsWith('file:') &&
-            !tab.url.startsWith('javascript:') &&
-            !tab.url.startsWith('data:') &&
-            !tab.url.startsWith('blob:')) {
-          await this.indexPageHeadings(tab.id);
-        } else {
-          console.log('Skipping URL:', tab.url);
-        }
-      }
-      console.log('Indexing complete for all tabs');
-    } catch (error) {
-      console.error('Error indexing all tabs:', error);
-    }
+    await this.searchEngine.indexAllTabs();
   }
   
-  // Clear indexed data for all open tabs
+  // Clear indexed data for all open tabs - delegate to SearchEngine
   async clearIndexForAllTabs() {
-    try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
-      console.log('Clearing index for all tabs:', tabs.length);
-      for (const tab of tabs) {
-        if (tab.id && tab.url) {
-          const urlKey = this.getUrlKey(tab.url);
-          // Remove from memory
-          if (urlKey && this.pageHeadings[urlKey]) {
-            delete this.pageHeadings[urlKey];
-          }
-          // Remove from IndexedDB
-          if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
-            try {
-              await window.YouTabsDB.deleteTabUrlMapping(tab.id);
-              if (urlKey) {
-                await window.YouTabsDB.deletePagesIndexByUrl(urlKey);
-              }
-            } catch (e) {
-              // Ignore individual errors
-            }
-          }
-        }
-      }
-      console.log('Cleared index for all tabs');
-      this.renderTabs(); // Re-render to update indexed indicators
-    } catch (error) {
-      console.error('Error clearing index for all tabs:', error);
-    }
+    await this.searchEngine.clearIndexForAllTabs();
+    this.renderTabs(); // Re-render to update indexed indicators
   }
   
   // Close other tabs (all except the active one) - delegate to TabManager
@@ -4151,573 +3782,42 @@ class YouTabsCore {
     }, 100);
   }
   
-  // Filter out duplicate headings from the indexed list
-  filterDuplicateHeadings(headings) {
-    const seen = new Map();
-    const uniqueHeadings = [];
-    
-    for (const heading of headings) {
-      let key;
-      
-      if (heading.type === 'image') {
-        // For images, duplicate is defined by text and imgUrl
-        key = `image:${heading.text || ''}:${heading.imgUrl || ''}`;
-      } else if (heading.type === 'video' || heading.type === 'videoEmbed') {
-        // For videos, duplicate is defined by text and videoUrl
-        key = `${heading.type}:${heading.text || ''}:${heading.videoUrl || ''}`;
-      } else if (heading.type === 'audio') {
-        // For audio, duplicate is defined by text and audioUrl
-        key = `audio:${heading.text || ''}:${heading.audioUrl || ''}`;
-      } else {
-        // For other types, duplicate is defined by text, type, and url
-        key = `${heading.type || ''}:${heading.text || ''}:${heading.url || ''}`;
-      }
-      
-      if (!seen.has(key)) {
-        seen.set(key, true);
-        uniqueHeadings.push(heading);
-      }
-    }
-    
-    return uniqueHeadings;
-  }
 
-  // Index page headings (h1-h6) for a specific tab
-  // Extract headings via content script message (more reliable with CSP)
-  async extractHeadingsViaContentScript(tabId, maxRetries = 2) {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const response = await browser.tabs.sendMessage(tabId, { action: 'extractHeadings' });
-        if (response && response.headings && response.headings.length > 0) {
-          console.log('extractHeadingsViaContentScript: got', response.headings.length, 'headings on attempt', attempt + 1);
-          return response.headings;
-        }
-        if (attempt < maxRetries) {
-          console.log('extractHeadingsViaContentScript: no results, retrying...');
-          await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
-        }
-      } catch (error) {
-        console.log('extractHeadingsViaContentScript: attempt', attempt + 1, 'failed:', error.message);
-        if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
-        }
-      }
-    }
-    console.log('extractHeadingsViaContentScript: all attempts failed');
-    return null;
-  }
-
-  // Only indexes if: page URL is not in index OR 30 minutes have passed since last index
+  // Index page headings for a specific tab - delegate to SearchEngine
   async indexPageHeadings(tabId) {
-    console.log('indexPageHeadings: called for tab', tabId);
-    
-    // Apply throttling based on settings
-    const throttleMs = this.settings?.indexThrottleMs || 1000;
-    const now = Date.now();
-    if (now - this._lastIndexTime < throttleMs) {
-      console.log('indexPageHeadings: throttled, waiting', throttleMs - (now - this._lastIndexTime), 'ms');
-      // Queue the indexing for later
-      this._indexQueue.push({ tabId, timestamp: now + throttleMs });
-      return;
-    }
-    this._lastIndexTime = now;
-    
-    try {
-      // Get the tab to check its URL
-      const tab = await browser.tabs.get(tabId);
-      console.log('indexPageHeadings: got tab', tab?.url);
-      if (!tab || !tab.url) {
-        console.log('indexPageHeadings: no tab or url');
-        return;
-      }
-      
-      // Skip URLs that can't be indexed
-      if (tab.url.startsWith('about:') || 
-          tab.url.startsWith('chrome:') ||
-          tab.url.startsWith('moz-extension:') ||
-          tab.url.startsWith('file:') ||
-          tab.url.startsWith('javascript:') ||
-          tab.url.startsWith('data:') ||
-          tab.url.startsWith('blob:')) {
-        console.log('indexPageHeadings: skipping unsupported URL:', tab.url);
-        return;
-      }
-      
-      // Check if page URL is already indexed and doesn't need re-indexing
-      const shouldIndex = await this.shouldReindexPageByUrl(tab.url);
-      console.log('indexPageHeadings: shouldIndex =', shouldIndex);
-      
-      if (!shouldIndex) {
-        console.log('indexPageHeadings: skipping, already indexed');
-        return;
-      }
-      
-      // Try to extract headings via content script (works better with CSP)
-      let headings = null;
-      const contentScriptHeadings = await this.extractHeadingsViaContentScript(tabId);
-      
-      if (contentScriptHeadings && contentScriptHeadings.length > 0) {
-        console.log('indexPageHeadings: got headings via content script:', contentScriptHeadings.length);
-        headings = contentScriptHeadings;
-      } else {
-        // Fallback to executeScript with MAIN world to bypass CSP
-        const maxChars = this.settings?.maxIndexChars || 250;
-        console.log('indexPageHeadings: trying executeScript with MAIN world');
-        try {
-          const results = await browser.scripting.executeScript({
-            target: { tabId: tabId },
-            world: 'MAIN', // Run in page's main world to bypass CSP
-            func: extractHeadings,
-            args: [this.settings]
-          });
-          console.log('indexPageHeadings: executeScript results:', results);
-          if (results && results[0] && results[0].result) {
-            headings = results[0].result;
-          }
-        } catch (scriptError) {
-          console.error('indexPageHeadings: scripting.executeScript error:', scriptError.message);
-        }
-      }
-      
-      if (headings && headings.length > 0) {
-        // Filter out duplicates before storing
-        headings = this.filterDuplicateHeadings(headings);
-        console.log('indexPageHeadings: after filter', headings.length, 'headings');
-        
-        // Store by URL instead of tabId to avoid duplicate indexing
-        const urlKey = this.getUrlKey(tab.url);
-        this.pageHeadings[urlKey] = headings;
-        await window.YouTabsDB.savePageHeadingsByUrl(tab.url, tabId, headings);
-        console.log('indexPageHeadings: saved for', urlKey, 'with', headings.length, 'headings');
-      } else {
-        console.log('indexPageHeadings: no results for', tab.url);
-      }
-    } catch (error) {
-      // Log errors for debugging
-      console.error('indexPageHeadings: error for', tab?.url, error.message);
-    }
-    
-    // Process queued indexing operations
-    this._processIndexQueue();
+    // Update SearchEngine settings before indexing
+    this.searchEngine.updateSettings(this.settings);
+    await this.searchEngine.indexPageHeadings(tabId);
   }
   
-  // Process queued indexing operations
-  async _processIndexQueue() {
-    // Don't process if already running, queue is empty, or worker unavailable
-    if (this._isIndexing || this._indexQueue.length === 0) {
-      return;
-    }
-    
-    // Prevent queue from growing indefinitely - drop oldest if too large
-    const maxQueueSize = this.settings?.maxQueueSize || 50;
-    if (this._indexQueue.length > maxQueueSize) {
-      console.warn('_processIndexQueue: Queue too large, trimming from', this._indexQueue.length);
-      this._indexQueue = this._indexQueue.slice(-maxQueueSize);
-    }
-    
-    this._isIndexing = true;
-    const throttleMs = this.settings?.indexThrottleMs || 1000;
-    
-    try {
-      while (this._indexQueue.length > 0) {
-        const now = Date.now();
-        const nextItem = this._indexQueue[0];
-        
-        if (nextItem.timestamp <= now) {
-          this._indexQueue.shift();
-          this._lastIndexTime = Date.now();
-          
-          try {
-            await this._indexSinglePage(nextItem.tabId);
-          } catch (e) {
-            console.error('_processIndexQueue: error indexing tab', nextItem.tabId, e.message);
-          }
-          
-          // Wait throttle delay between items
-          await new Promise(resolve => setTimeout(resolve, throttleMs));
-        } else {
-          // Wait until next item is ready
-          await new Promise(resolve => setTimeout(resolve, Math.min(nextItem.timestamp - now, throttleMs)));
-        }
-      }
-    } finally {
-      this._isIndexing = false;
-    }
-  }
   
-  // Internal method to index a single page
-  async _indexSinglePage(tabId) {
-    // This reuses most of the indexPageHeadings logic
-    // but without the throttle check
-    try {
-      const tab = await browser.tabs.get(tabId);
-      if (!tab || !tab.url) return;
-      
-      // Skip unsupported URLs
-      if (tab.url.startsWith('about:') || 
-          tab.url.startsWith('chrome:') ||
-          tab.url.startsWith('moz-extension:') ||
-          tab.url.startsWith('file:') ||
-          tab.url.startsWith('javascript:') ||
-          tab.url.startsWith('data:') ||
-          tab.url.startsWith('blob:')) {
-        return;
-      }
-      
-      const shouldIndex = await this.shouldReindexPageByUrl(tab.url);
-      if (!shouldIndex) return;
-      
-      let headings = null;
-      const contentScriptHeadings = await this.extractHeadingsViaContentScript(tabId);
-      
-      if (contentScriptHeadings && contentScriptHeadings.length > 0) {
-        headings = contentScriptHeadings;
-      } else {
-        const maxChars = this.settings?.maxIndexChars || 250;
-        try {
-          const results = await browser.scripting.executeScript({
-            target: { tabId: tabId },
-            world: 'MAIN',
-            func: extractHeadings,
-            args: [this.settings]
-          });
-          if (results && results[0] && results[0].result) {
-            headings = results[0].result;
-          }
-        } catch (scriptError) {
-          console.error('_indexSinglePage: scripting error:', scriptError.message);
-        }
-      }
-      
-      if (headings && headings.length > 0) {
-        headings = this.filterDuplicateHeadings(headings);
-        const urlKey = this.getUrlKey(tab.url);
-        this.pageHeadings[urlKey] = headings;
-        await window.YouTabsDB.savePageHeadingsByUrl(tab.url, tabId, headings);
-        console.log('_indexSinglePage: saved', headings.length, 'headings for', urlKey);
-      }
-    } catch (error) {
-      console.error('_indexSinglePage: error for tab', tabId, error.message);
-    }
-  }
-  
-  // Get a URL key for indexing (normalizes the URL)
-  getUrlKey(url) {
-    try {
-      // Remove trailing slash and hash for consistent indexing
-      const urlObj = new URL(url);
-      return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
-    } catch (e) {
-      console.log('getUrlKey: failed to parse URL:', url, e);
-      return url;
-    }
-  }
-  
-  // Check if a page should be re-indexed by URL
-  // Returns true if: page URL is not indexed OR 30 minutes have passed since last index
-  // Returns false if page was recently updated via incremental indexing
-  async shouldReindexPageByUrl(url) {
-    try {
-      const urlKey = this.getUrlKey(url);
-      console.log('shouldReindexPageByUrl: checking URL:', urlKey);
-      
-      // Ensure database is opened
-      if (!window.YouTabsDB || !window.YouTabsDB.isIndexedDBAvailable()) {
-        console.log('shouldReindexPageByUrl: no DB, should index');
-        return true;
-      }
-      
-      await window.YouTabsDB.openDatabase();
-      
-      // Get page index by URL with timestamp
-      const pageIndexWithTimestamp = await window.YouTabsDB.getPagesIndexByUrl(urlKey);
-      console.log('shouldReindexPageByUrl: result:', pageIndexWithTimestamp);
-      
-      if (!pageIndexWithTimestamp || !pageIndexWithTimestamp.indexedAt) {
-        console.log('shouldReindexPageByUrl: not indexed, should index');
-        return true;
-      }
-
-      // Check if page was recently updated via incremental indexing
-      // If updated in the last 5 minutes, skip re-indexing as changes are already captured
-      const now = Date.now();
-      const FIVE_MINUTES_MS = 5 * 60 * 1000;
-      const timeSinceIndex = now - pageIndexWithTimestamp.indexedAt;
-      
-      // If incremental update happened recently (within 5 minutes), don't re-index
-      // This allows MutationObserver to handle SPA updates without full re-indexing
-      if (pageIndexWithTimestamp.lastIncrementalUpdate) {
-        const timeSinceIncremental = now - pageIndexWithTimestamp.lastIncrementalUpdate;
-        if (timeSinceIncremental < FIVE_MINUTES_MS) {
-          console.log('shouldReindexPageByUrl: incremental update recently, skip. Time:', Math.round(timeSinceIncremental / 60000), 'minutes');
-          return false;
-        }
-      }
-      
-      // Check if 30 minutes have passed since last index
-      const THIRTY_MINUTES_MS = 30 * 60 * 1000;
-      
-      if (timeSinceIndex >= THIRTY_MINUTES_MS) {
-        console.log('shouldReindexPageByUrl: expired, should re-index. Time:', Math.round(timeSinceIndex / 60000), 'minutes');
-        return true;
-      }
-      
-      console.log('shouldReindexPageByUrl: indexed recently, skip');
-      return false;
-    } catch (error) {
-      console.error('shouldReindexPageByUrl: error:', error);
-      return true;
-    }
-  }
-  
-  // Save page headings to IndexedDB
-  async savePageHeadings() {
-    try {
-      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
-        await window.YouTabsDB.savePagesIndex(this.pageHeadings);
-      }
-    } catch (error) {
-      console.error('Error saving page headings:', error);
-    }
-  }
-  
-  // Load page headings from IndexedDB
-  async loadPageHeadings() {
-    try {
-      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
-        await window.YouTabsDB.openDatabase();
-        
-        // Get pagesIndex (url -> headings)
-        const pagesIndex = await window.YouTabsDB.getPagesIndexWithTimestamp();
-        
-        // Build in-memory index: urlKey -> headings
-        this.pageHeadings = {};
-        for (const [urlKey, data] of Object.entries(pagesIndex)) {
-          if (data.headings && data.headings.length > 0) {
-            this.pageHeadings[urlKey] = this.filterDuplicateHeadings(data.headings);
-          }
-        }
-        
-        // Note: tabIdToUrlKey mapping is no longer needed since we get tabId from open tabs
-        // when searching, and for closed tabs we can't know the tabId anyway
-        this.tabIdToUrlKey = {};
-      }
-    } catch (error) {
-      console.error('Error loading page headings:', error);
-    }
-  }
-  
-  // Search page headings (uses Web Worker when available)
-  async searchHeadings(query) {
-    if (!query || !this.settings.enablePageSearch || this.filterHeadingTypes.length === 0) {
-      return [];
-    }
-    
-    // Try to use Web Worker for search if available
-    if (this._workerAvailable && this._indexWorker) {
-      try {
-        const results = await this._searchHeadingsInWorker(query);
-        return results;
-      } catch (error) {
-        console.warn('Worker search failed, falling back to main thread:', error);
-      }
-    }
-    
-    // Fallback to synchronous search on main thread
-    return this._searchHeadingsSync(query);
-  }
-  
-  // Search headings using Web Worker
-  _searchHeadingsInWorker(query) {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Worker search timeout'));
-      }, 5000);
-      
-      const handleMessage = (e) => {
-        const { type, results, error } = e.data;
-        
-        if (type === 'searchCompleted') {
-          clearTimeout(timeout);
-          this._indexWorker.removeEventListener('message', handleMessage);
-          
-          // Enrich results with tab info
-          const enrichedResults = this._enrichSearchResults(results);
-          resolve(enrichedResults);
-        } else if (type === 'error') {
-          clearTimeout(timeout);
-          this._indexWorker.removeEventListener('message', handleMessage);
-          reject(new Error(error));
-        }
-      };
-      
-      this._indexWorker.addEventListener('message', handleMessage);
-      
-      // Send search request to worker
-      this._indexWorker.postMessage({
-        type: 'searchHeadings',
-        data: {
-          query: query,
-          pageHeadings: this.pageHeadings,
-          filterHeadingTypes: this.filterHeadingTypes,
-          maxResults: this.settings.maxSearchResults || 15
-        }
-      });
-    });
-  }
-  
-  // Enrich worker search results with tab information
-  _enrichSearchResults(results) {
-    const openTabs = this.tabs;
-    
-    return results.map(result => {
-      const pageUrl = result.pageUrl;
-      const matchingTab = openTabs.find(t => {
-        try {
-          const tUrl = t.url || '';
-          const hUrl = pageUrl || '';
-          return tUrl.includes(hUrl) || hUrl.includes(tUrl);
-        } catch {
-          return false;
-        }
-      });
-      
-      const isTabOpen = !!matchingTab;
-      
-      // Adjust relevance for open tabs
-      let relevance = result.relevance;
-      if (isTabOpen) {
-        relevance += 5;
-      }
-      
-      return {
-        ...result,
-        tabId: matchingTab ? matchingTab.id : null,
-        tab: matchingTab,
-        isTabOpen: isTabOpen,
-        relevance: relevance
-      };
-    });
-  }
-  
-  // Synchronous search on main thread (fallback)
-  _searchHeadingsSync(query) {
-    const results = [];
-    const lowerQuery = query.toLowerCase();
-    const maxResults = this.settings.maxSearchResults || 15;
-    
-    // Get list of currently open tabs for URL matching
-    const openTabs = this.tabs;
-    
-    // Search through all indexed headings (including closed tabs)
-    for (const [urlKey, headings] of Object.entries(this.pageHeadings)) {
-      for (const heading of headings) {
-        // Filter by heading type
-        if (!this.filterHeadingTypes.includes(heading.type)) {
-          continue;
-        }
-        
-        // Use fuzzy matching for search
-        const lowerText = heading.text.toLowerCase();
-        let fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerText, 2);
-        
-        // Also search by name field (for images and other elements with filenames)
-        if (!fuzzyResult.match && heading.name) {
-          const lowerName = heading.name.toLowerCase();
-          fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerName, 2);
-        }
-        
-        // Also search by fileType field (for images and other elements with file types)
-        if (!fuzzyResult.match && heading.fileType) {
-          const lowerFileType = heading.fileType.toLowerCase();
-          fuzzyResult = YouTabsCore.fuzzyMatch(lowerQuery, lowerFileType, 2);
-        }
-        
-        if (fuzzyResult.match) {
-          // Try to find an open tab with matching URL
-          const pageUrl = heading.url;
-          const matchingTab = openTabs.find(t => {
-            try {
-              const tUrl = t.url || '';
-              const hUrl = pageUrl || '';
-              return tUrl.includes(hUrl) || hUrl.includes(tUrl);
-            } catch {
-              return false;
-            }
-          });
-          
-          const isTabOpen = !!matchingTab;
-          const tabId = matchingTab ? matchingTab.id : null;
-          
-          // Calculate relevance score using fuzzy match results
-          let relevance = 0;
-          
-          if (fuzzyResult.distance === 0) {
-            relevance = 100;
-          } else if (fuzzyResult.distance <= 1) {
-            relevance = 80 + (1 - fuzzyResult.distance) * 10;
-          } else {
-            relevance = 30 + fuzzyResult.score * 40;
-          }
-          
-          if (heading.type === 'heading') {
-            relevance += 20;
-          } else if (heading.type === 'paragraph') {
-            relevance += 10;
-          }
-          
-          if (isTabOpen) {
-            relevance += 5;
-          }
-          
-          results.push({
-            tabId: tabId,
-            tab: matchingTab,
-            isTabOpen: isTabOpen,
-            pageUrl: pageUrl,
-            heading: heading,
-            relevance: relevance,
-            fuzzyScore: fuzzyResult.score
-          });
-        }
-      }
-    }
-    
-    // Sort by relevance (descending) and limit results
-    results.sort((a, b) => b.relevance - a.relevance);
-    return results.slice(0, maxResults);
-  }
-  
-  // Search and display all headings for a specific tab
+  // Search and display all headings for a specific tab - delegate to SearchEngine
   searchHeadingsForTab(tabId) {
     const numericTabId = Number(tabId);
     
-    // Find the tab to get its URL
-    const tab = this.tabs.find(t => t.id === numericTabId);
-    if (!tab) {
-      console.log(`Tab ${numericTabId} not found`);
-      return;
-    }
-    
-    // Use URL key to get headings
-    const urlKey = this.getUrlKey(tab.url);
-    const headings = this.pageHeadings[urlKey];
+    // Get headings from SearchEngine
+    const headings = this.searchEngine.getHeadingsForTab(numericTabId);
     
     if (!headings || headings.length === 0) {
       console.log(`No indexed headings found for tab ${numericTabId}`);
       return;
     }
     
-    // Create results from all headings for this tab
-    this.headingSearchResults = headings.map(heading => ({
+    // Find the tab
+    const tab = this.tabs.find(t => t.id === numericTabId);
+    if (!tab) {
+      console.log(`Tab ${numericTabId} not found`);
+      return;
+    }
+    
+    // Set results in SearchEngine and clear query
+    this.searchEngine.headingSearchResults = headings.map(heading => ({
       tabId: numericTabId,
       tab: tab,
       heading: heading,
       relevance: 50 // Default relevance for showing all headings
     }));
-    
-    // Clear search query to show all headings for this tab
-    this.searchQuery = '';
+    this.searchEngine.searchQuery = '';
     
     // Update UI
     this.renderTabs();
@@ -4730,9 +3830,7 @@ class YouTabsCore {
     console.log(`Showing ${headings.length} indexed headings for tab ${numericTabId}`);
   }
   
-  // Remove headings for a tab from memory and IndexedDB
-  // This is called from the context menu "Remove index" option
-  // Note: Indexed data is NOT removed when a tab is closed - only via this method or expiration time
+  // Remove headings for a tab from memory and IndexedDB - uses SearchEngine URL key
   async removePageHeadingsForTab(tabId) {
     const numericTabId = Number(tabId);
     
@@ -4741,15 +3839,15 @@ class YouTabsCore {
     try {
       const tab = await browser.tabs.get(numericTabId);
       if (tab && tab.url) {
-        urlKey = this.getUrlKey(tab.url);
+        urlKey = this.searchEngine.getUrlKey(tab.url);
       }
     } catch (e) {
       // Tab might not be available
     }
     
     // Remove from memory using URL key
-    if (urlKey && this.pageHeadings[urlKey]) {
-      delete this.pageHeadings[urlKey];
+    if (urlKey && this.searchEngine.pageHeadings[urlKey]) {
+      delete this.searchEngine.pageHeadings[urlKey];
     }
     
     // Remove from IndexedDB
@@ -4778,18 +3876,11 @@ class YouTabsCore {
       const numericTabId = Number(tabId);
       let removed = false;
       
-      // Remove tab from all custom groups
-      for (const group of this.customGroups) {
-        const originalLength = group.tabIds.length;
-        group.tabIds = group.tabIds.filter(id => Number(id) !== numericTabId);
-        
-        if (group.tabIds.length !== originalLength) {
-          removed = true;
-          // Also remove metadata for this tab in this group
-          if (this.groupTabMetadata[group.id] && this.groupTabMetadata[group.id][numericTabId]) {
-            delete this.groupTabMetadata[group.id][numericTabId];
-          }
-        }
+      // Remove tab from all custom groups via GroupManager
+      const group = this.groupManager.getCustomGroupForTab(numericTabId);
+      if (group) {
+        await this.groupManager.removeTabFromGroup(numericTabId, group.id);
+        removed = true;
       }
       
       // Remove custom tab name if exists
@@ -4804,11 +3895,8 @@ class YouTabsCore {
       // 1. It expires based on indexExpirationDays setting
       // 2. User manually removes it via "Remove index" context menu
       
-      // Save changes if tab was removed from any group
+      // Reload tabs to update the display if needed
       if (removed) {
-        await this.saveCustomGroups();
-        await this.saveGroupTabMetadata();
-        // Reload tabs to update the display
         try {
           await this.loadTabs();
         } catch (error) {
@@ -5144,146 +4232,43 @@ class YouTabsCore {
     }
   }
   
-  // Search functionality
+  // Search functionality - delegate to SearchEngine
   setSearchQuery(query) {
-    // Use debounced search for better performance
-    this._debouncedSetSearchQuery(query);
+    // Update SearchEngine settings before searching
+    this.searchEngine.updateSettings(this.settings);
+    this.searchEngine.setSearchQuery(query);
   }
   
-  // Internal search method (called by debounced wrapper)
-  async _performSearch(query) {
-    this.searchQuery = query?.toLowerCase() || '';
-    
-    // Apply filter - only filter tabs if filterTabs is enabled
-    this.filteredTabs = (this.searchQuery && this.filterTabs) ? this.filterTabsList(this.tabs, this.searchQuery) : [];
-    
-    // Also search page headings if enabled and has heading types selected
-    this.headingSearchResults = [];
-    if (this.searchQuery && this.settings.enablePageSearch && this.filterHeadingTypes.length > 0) {
-      this.headingSearchResults = await this.searchHeadings(this.searchQuery);
-    }
-    
-    this.renderTabs();
-  }
-  
-  filterTabsList(tabs, query) {
-    if (!query) return tabs;
-    
-    return tabs.filter(tab => {
-      const title = (tab.title || '').toLowerCase();
-      const url = (tab.url || '').toLowerCase();
-      
-      // Get custom tab name for this tab
-      const numericTabId = Number(tab.id);
-      const customTabName = this.customTabNames[numericTabId]?.customName?.toLowerCase() || '';
-      
-      // Get group and subgroup names for this tab
-      const groupNames = this.getGroupHierarchyNames(tab.id);
-      const groupNameSearch = groupNames.join(' ').toLowerCase();
-      
-      return title.includes(query) || url.includes(query) || customTabName.includes(query) || groupNameSearch.includes(query);
-    });
-  }
-  
-  // Get all parent group names for a tab (including subgroups)
+  // Get all parent group names for a tab (including subgroups) - delegated to GroupManager
   getGroupHierarchyNames(tabId) {
-    const group = this.getCustomGroupForTab(tabId);
-    if (!group) return [];
-    
-    const names = [];
-    let currentGroup = group;
-    
-    while (currentGroup) {
-      names.unshift(currentGroup.name);
-      if (currentGroup.parentId) {
-        currentGroup = this.customGroups.find(g => g.id === currentGroup.parentId);
-      } else {
-        currentGroup = null;
-      }
-    }
-    
-    return names;
+    return this.groupManager.getGroupHierarchyNames(tabId);
   }
   
-  // Get all parent group names for a group (for context menu search)
+  // Get all parent group names for a group (for context menu search) - delegated to GroupManager
   getGroupHierarchyNamesForGroup(groupId) {
-    const group = this.customGroups.find(g => g.id === groupId);
-    if (!group) return [];
-    
-    const names = [];
-    let currentGroup = group;
-    
-    while (currentGroup) {
-      names.unshift(currentGroup.name);
-      if (currentGroup.parentId) {
-        currentGroup = this.customGroups.find(g => g.id === currentGroup.parentId);
-      } else {
-        currentGroup = null;
-      }
-    }
-    
-    return names;
+    return this.groupManager.getGroupHierarchyNamesForGroup(groupId);
   }
   
   getTabsToDisplay() {
-    // If filterTabs is false, return empty array during search
-    if (this.searchQuery && !this.filterTabs) {
-      return [];
-    }
-    if (this.searchQuery && this.filteredTabs.length > 0) {
-      return this.filteredTabs;
-    }
-    return this.tabs;
+    return this.searchEngine.getTabsToDisplay();
   }
   
   clearSearch() {
-    this.searchQuery = '';
-    this.filteredTabs = [];
-    this.headingSearchResults = [];
-    this.renderTabs();
+    this.searchEngine.clearSearch();
   }
   
-  // Apply search filter
+  // Apply search filter - delegate to SearchEngine
   applyFilter(filterOptions) {
-    if (filterOptions.filterTabs !== undefined) {
-      this.filterTabs = filterOptions.filterTabs;
-    }
-    if (filterOptions.filterHeadingTypes !== undefined) {
-      this.filterHeadingTypes = filterOptions.filterHeadingTypes;
-    }
-    
-    // Update hasActiveFilter state
-    this.hasActiveFilter = !this.filterTabs || this.filterHeadingTypes.length < this.totalFilterTypes;
-    
-    // Re-run search with new filter
-    if (this.searchQuery) {
-      this.setSearchQuery(this.searchQuery);
-    } else {
-      this.renderTabs();
-    }
+    this.searchEngine.applyFilter(filterOptions);
   }
   
-  // Get current filter state
+  // Get current filter state - delegate to SearchEngine
   getFilterState() {
-    return {
-      filterTabs: this.filterTabs,
-      filterHeadingTypes: this.filterHeadingTypes,
-      hasActiveFilter: this.hasActiveFilter
-    };
+    return this.searchEngine.getFilterState();
   }
   
-  // Reset filter to default values
+  // Reset filter to default values - delegate to SearchEngine
   resetFilter() {
-    // Default filter values
-    this.filterTabs = true;
-    this.filterHeadingTypes = [...YouTabsCore.FILTER_TYPES].map(t => t.value);
-    this.hasActiveFilter = false;
-    
-    // Re-run search if there's an active search query
-    if (this.searchQuery) {
-      this.setSearchQuery(this.searchQuery);
-    } else {
-      this.renderTabs();
-    }
+    this.searchEngine.resetFilter();
   }
 }
