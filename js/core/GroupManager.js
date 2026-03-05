@@ -282,16 +282,39 @@ class GroupManager {
     // Check nesting level if parent is specified
     if (parentId) {
       const depth = this.getGroupDepth(parentId);
-      if (depth >= 3) {
+      if (depth >= 2) {
         console.warn('GroupManager: Maximum nesting level (3) reached');
         return null;
+      }
+    }
+    
+    let groupColor = color;
+    
+    // If creating a root group, generate a unique random color
+    if (!parentId) {
+      groupColor = this.generateUniqueColor();
+    } else {
+      // If creating a subgroup, use parent's color (will be darkened based on depth in getGroupInfo)
+      const parentGroup = this._getGroupById(parentId);
+      if (parentGroup) {
+        // Store the root color for subgroups
+        let rootParent = parentGroup;
+        while (rootParent.parentId) {
+          const nextParent = this._getGroupById(rootParent.parentId);
+          if (nextParent) {
+            rootParent = nextParent;
+          } else {
+            break;
+          }
+        }
+        groupColor = rootParent.color;
       }
     }
     
     const newGroup = {
       id: 'group_' + Date.now(),
       name: name,
-      color: color,
+      color: groupColor,
       tabIds: [],
       parentId: parentId,
       createdAt: Date.now(),
@@ -966,37 +989,34 @@ class GroupManager {
       const groupId = groupKey.replace('custom_', '');
       const customGroup = this.customGroups.find(g => g.id === groupId);
       if (customGroup) {
-        // Get depth and find root parent's color
+        // Get depth
         let depth = this.getGroupDepth(groupId);
-        let rootColorId = customGroup.color;
+        let baseColor = customGroup.color;
         
-        // If nested, find the root parent's color
-        if (customGroup.parentId) {
-          let parent = this.customGroups.find(g => g.id === customGroup.parentId);
-          while (parent && parent.parentId) {
-            parent = this.customGroups.find(g => g.id === parent.parentId);
-          }
-          if (parent) {
-            rootColorId = parent.color;
+        // If nested, use immediate parent's color as base
+        if (customGroup.parentId && depth > 0) {
+          const parentGroup = this._getGroupById(customGroup.parentId);
+          if (parentGroup) {
+            baseColor = parentGroup.color;
           }
         }
         
         // Get color - handle both color ID (red, blue) and hex color (#ff5252)
         let displayColor;
-        const colorObj = this.groupColors.find(c => c.id === rootColorId);
+        const colorObj = this.groupColors.find(c => c.id === baseColor);
         if (colorObj) {
           displayColor = colorObj.color;
-        } else if (rootColorId && rootColorId.startsWith('#')) {
-          // Handle hex color from color picker
-          displayColor = rootColorId;
+        } else if (baseColor && baseColor.startsWith('#')) {
+          // Handle hex color from color picker or generated unique color
+          displayColor = baseColor;
         } else {
           // Fallback to default blue
           displayColor = this.groupColors[4].color;
         }
         
-        // Darken color based on nesting depth
+        // Darken color based on nesting depth (darker for deeper levels)
         if (depth > 0) {
-          displayColor = this.darkenColor(displayColor, depth * 15);
+          displayColor = this.darkenColor(displayColor, depth * 20);
         }
         
         return {
@@ -1048,6 +1068,49 @@ class GroupManager {
    */
   getAvailableColors() {
     return [...this.groupColors];
+  }
+
+  /**
+   * Update group color when it's moved to a new parent
+   * Root groups get their own unique color, subgroups inherit from root parent
+   * @param {string} groupId - Group ID that was moved
+   * @returns {Promise<boolean>} Success status
+   */
+  async updateGroupColorOnMove(groupId) {
+    const group = this._getGroupById(groupId);
+    if (!group) return false;
+
+    // If group is now a root group (no parent), generate unique color
+    if (!group.parentId) {
+      group.color = this.generateUniqueColor();
+    } else {
+      // If group has a parent, use the root parent's color
+      let rootParent = this._getGroupById(group.parentId);
+      while (rootParent && rootParent.parentId) {
+        rootParent = this._getGroupById(rootParent.parentId);
+      }
+      if (rootParent) {
+        group.color = rootParent.color;
+      }
+    }
+
+    // Recursively update all descendants
+    const updateDescendants = (parentId) => {
+      const children = this.customGroups.filter(g => g.parentId === parentId);
+      for (const child of children) {
+        // Child inherits from its immediate parent (which is now updated)
+        const immediateParent = this._getGroupById(child.parentId);
+        if (immediateParent) {
+          child.color = immediateParent.color;
+        }
+        // Recursively update this child's descendants
+        updateDescendants(child.id);
+      }
+    };
+    updateDescendants(groupId);
+
+    await this.saveCustomGroups();
+    return true;
   }
 
   // ==================== Color Utilities ====================
@@ -1115,6 +1178,21 @@ class GroupManager {
     if (g.length === 1) g = '0' + g;
     if (b.length === 1) b = '0' + b;
     return '#' + r + g + b;
+  }
+
+  /**
+   * Generate a unique random color for a new group
+   * Uses HSL to generate vibrant colors with good contrast
+   * @returns {string} Random hex color
+   */
+  generateUniqueColor() {
+    // Generate random hue (0-360)
+    const h = Math.floor(Math.random() * 360);
+    // Use high saturation (65-85%) for vibrant colors
+    const s = Math.floor(Math.random() * 21) + 65;
+    // Use medium-high lightness (50-65%) for good visibility
+    const l = Math.floor(Math.random() * 16) + 50;
+    return this.hslToHex(h, s, l);
   }
 
   /**

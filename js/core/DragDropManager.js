@@ -726,16 +726,31 @@ class DragDropManager {
     const targetDepth = this.options.getGroupDepth(targetGroupId);
     
     // Check if Shift key is pressed - if so, make it a root-level group
+    let parentChanged = false;
     if (e.shiftKey) {
-      sourceGroup.parentId = null;
+      if (sourceGroup.parentId !== null) {
+        sourceGroup.parentId = null;
+        parentChanged = true;
+      }
     } else if (isOntoCenter && targetDepth < 2) {
       // Dropping onto the group center - make it a child
-      sourceGroup.parentId = targetGroupId;
+      if (sourceGroup.parentId !== targetGroupId) {
+        sourceGroup.parentId = targetGroupId;
+        parentChanged = true;
+      }
     } else if (isOntoCenter && targetDepth >= 2) {
       // Dropping onto a level 3 group - cannot nest
       console.warn('DragDropManager: Cannot nest group into level 3 subgroup');
     }
     // Dropping above/below - keep current parent (reorder only)
+    
+    // Update color if parent changed
+    if (parentChanged) {
+      const groupManager = this.options.groupManager;
+      if (groupManager) {
+        await groupManager.updateGroupColorOnMove(sourceGroupId);
+      }
+    }
     
     await this.options.saveCustomGroups();
     await this.options.renderTabs();
@@ -782,6 +797,10 @@ class DragDropManager {
     
     // Move source group into target group
     sourceGroup.parentId = targetGroupId;
+    
+    // Update color to match new parent's color
+    await groupManager.updateGroupColorOnMove(sourceGroupId);
+    
     await this.options.saveCustomGroups();
     await this.options.renderTabs();
     this.cleanupDrag();
@@ -842,6 +861,10 @@ class DragDropManager {
         if (group && group.parentId) {
           // Make it a root-level group
           group.parentId = null;
+          
+          // Update color to be a unique root color
+          await groupManager.updateGroupColorOnMove(groupId);
+          
           await this.options.saveCustomGroups();
           await this.options.renderTabs();
           

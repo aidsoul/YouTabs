@@ -73,32 +73,6 @@ class YouTabsSidebar extends YouTabsCore {
       });
     }
     
-    // Click on empty area of you-tabs-container to show create group menu
-    const tabsContainer = document.querySelector('.you-tabs-container');
-    if (tabsContainer) {
-      tabsContainer.addEventListener('click', (e) => {
-        const target = e.target;
-        // Don't show menu if clicking on interactive elements
-        if (target.closest('.tab-item') || 
-            target.closest('.tab-group-header') || 
-            target.closest('.tabs-header') ||
-            target.closest('.tab-preview') ||
-            target.tagName === 'INPUT' ||
-            target.tagName === 'BUTTON') {
-          return;
-        }
-        // Hide any existing menu before showing new one
-        if (this.uiRenderer) {
-          this.uiRenderer.hideContextMenu();
-        }
-        // Show create group menu on click
-        e.preventDefault();
-        if (this.uiRenderer) {
-          this.uiRenderer.showEmptyAreaContextMenu(e);
-        }
-      });
-    }
-    
     // Search functionality
     if (this.searchInput) {
       this.searchInput.addEventListener('input', (e) => {

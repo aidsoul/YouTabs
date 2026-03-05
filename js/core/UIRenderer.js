@@ -235,16 +235,16 @@ class UIRenderer {
     `;
     
     const container = document.createElement('div');
-    const doc = this._domParser.parseFromString(modalHTML, 'text/html');
-    this.modal = doc.body.firstElementChild;
+    container.innerHTML = modalHTML;
+    this.modal = container.firstElementChild;
     document.body.appendChild(this.modal);
     
-    // Bind modal events
+    // Bind modal events - query relative to the modal to avoid conflicts
     const overlay = this.modal;
-    const closeBtn = document.getElementById('modalClose');
-    const cancelBtn = document.getElementById('modalCancel');
-    const confirmBtn = document.getElementById('modalConfirm');
-    const input = document.getElementById('modalInput');
+    const closeBtn = this.modal.querySelector('#modalClose');
+    const cancelBtn = this.modal.querySelector('#modalCancel');
+    const confirmBtn = this.modal.querySelector('#modalConfirm');
+    const input = this.modal.querySelector('#modalInput');
     
     // Close on overlay click
     overlay.addEventListener('click', (e) => {
@@ -265,7 +265,7 @@ class UIRenderer {
     
     // Confirm button
     confirmBtn.addEventListener('click', () => {
-      const inputWrapper = document.getElementById('modalInputWrapper');
+      const inputWrapper = this.modal.querySelector('#modalInputWrapper');
       if (inputWrapper.style.display !== 'none') {
         this.hideModal(input.value);
       } else {
@@ -305,12 +305,12 @@ class UIRenderer {
       
       this.modalResolve = resolve;
       
-      const modalTitle = document.getElementById('modalTitle');
-      const modalMessage = document.getElementById('modalMessage');
-      const modalInputWrapper = document.getElementById('modalInputWrapper');
-      const modalInput = document.getElementById('modalInput');
-      const modalConfirm = document.getElementById('modalConfirm');
-      const modalCancel = document.getElementById('modalCancel');
+      const modalTitle = this.modal.querySelector('#modalTitle');
+      const modalMessage = this.modal.querySelector('#modalMessage');
+      const modalInputWrapper = this.modal.querySelector('#modalInputWrapper');
+      const modalInput = this.modal.querySelector('#modalInput');
+      const modalConfirm = this.modal.querySelector('#modalConfirm');
+      const modalCancel = this.modal.querySelector('#modalCancel');
       
       modalTitle.textContent = title;
       modalMessage.textContent = message;
@@ -342,11 +342,11 @@ class UIRenderer {
       
       this.modalResolve = resolve;
       
-      const modalTitle = document.getElementById('modalTitle');
-      const modalMessage = document.getElementById('modalMessage');
-      const modalInputWrapper = document.getElementById('modalInputWrapper');
-      const modalConfirm = document.getElementById('modalConfirm');
-      const modalCancel = document.getElementById('modalCancel');
+      const modalTitle = this.modal.querySelector('#modalTitle');
+      const modalMessage = this.modal.querySelector('#modalMessage');
+      const modalInputWrapper = this.modal.querySelector('#modalInputWrapper');
+      const modalConfirm = this.modal.querySelector('#modalConfirm');
+      const modalCancel = this.modal.querySelector('#modalCancel');
       
       modalTitle.textContent = title;
       modalMessage.textContent = message;
@@ -373,11 +373,11 @@ class UIRenderer {
       
       this.modalResolve = resolve;
       
-      const modalTitle = document.getElementById('modalTitle');
-      const modalMessage = document.getElementById('modalMessage');
-      const modalInputWrapper = document.getElementById('modalInputWrapper');
-      const modalConfirm = document.getElementById('modalConfirm');
-      const modalCancel = document.getElementById('modalCancel');
+      const modalTitle = this.modal.querySelector('#modalTitle');
+      const modalMessage = this.modal.querySelector('#modalMessage');
+      const modalInputWrapper = this.modal.querySelector('#modalInputWrapper');
+      const modalConfirm = this.modal.querySelector('#modalConfirm');
+      const modalCancel = this.modal.querySelector('#modalCancel');
       
       modalTitle.textContent = title;
       modalMessage.textContent = message;
@@ -402,9 +402,11 @@ class UIRenderer {
     this.modal.classList.remove('active');
     
     // Reset confirm button styling
-    const modalConfirm = document.getElementById('modalConfirm');
-    modalConfirm.classList.remove('modal-btn-danger');
-    modalConfirm.classList.add('modal-btn-confirm');
+    const modalConfirm = this.modal.querySelector('#modalConfirm');
+    if (modalConfirm) {
+      modalConfirm.classList.remove('modal-btn-danger');
+      modalConfirm.classList.add('modal-btn-confirm');
+    }
     
     if (this.modalResolve) {
       this.modalResolve(value);
@@ -1981,6 +1983,10 @@ class UIRenderer {
             
             // Move source group into target group
             sourceGroup.parentId = groupId;
+            
+            // Update color to match new parent's color
+            await groupManager.updateGroupColorOnMove(sourceGroupId);
+            
             await this.options.onSaveCustomGroups();
             this.options.onRenderTabs();
             dragDropManager.cleanupDrag();
