@@ -2212,7 +2212,6 @@ body.full-height .tab-item:hover {
 
 .modal-input:focus {
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.2);
 }
 
 .modal-input::placeholder {
