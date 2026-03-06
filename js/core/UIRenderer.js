@@ -467,7 +467,7 @@ class UIRenderer {
     renameItem.addEventListener('click', async () => {
       const currentName = this.options.getTabDisplayTitle(tab);
       const newName = await this.showPrompt('Rename Tab', 'Enter new name:', currentName);
-      if (newName?.trim() && newName !== currentName) {
+      if (newName && typeof newName === 'string' && newName.trim() && newName !== currentName) {
         await this.options.onSetTabCustomName(tabId, newName.trim());
       }
       this.hideContextMenu();
@@ -526,7 +526,7 @@ class UIRenderer {
       newGroupItem.textContent = 'Create group...';
       newGroupItem.addEventListener('click', async () => {
         const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-        if (groupName?.trim()) {
+        if (groupName && typeof groupName === 'string' && groupName.trim()) {
           const newGroup = await this.options.onCreateCustomGroup(groupName.trim());
           if (newGroup) {
             await this.options.onAddTabToGroup(tabId, newGroup.id);
@@ -615,7 +615,7 @@ class UIRenderer {
       createGroupItem.textContent = 'Create group...';
       createGroupItem.addEventListener('click', async () => {
         const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-        if (groupName?.trim()) {
+        if (groupName && typeof groupName === 'string' && groupName.trim()) {
           const newGroup = await this.options.onCreateCustomGroup(groupName.trim());
           if (newGroup) {
             await this.options.onAddTabToGroup(tabId, newGroup.id);
@@ -808,7 +808,7 @@ class UIRenderer {
       addSubgroupItem.textContent = 'Add subgroup';
       addSubgroupItem.addEventListener('click', async () => {
         const subgroupName = await this.showPrompt('New Subgroup', 'Enter subgroup name:', 'New subgroup');
-        if (subgroupName?.trim()) {
+        if (subgroupName && typeof subgroupName === 'string' && subgroupName.trim()) {
           await this.options.onCreateCustomGroup(subgroupName.trim(), 'blue', groupId);
         }
         this.hideContextMenu();
@@ -845,7 +845,7 @@ class UIRenderer {
     createGroupItem.textContent = 'Create group';
     createGroupItem.addEventListener('click', async () => {
       const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-      if (groupName?.trim()) {
+      if (groupName && typeof groupName === 'string' && groupName.trim()) {
         await this.options.onCreateCustomGroup(groupName.trim());
       }
       this.hideContextMenu();
@@ -863,16 +863,54 @@ class UIRenderer {
    * @param {Event} e - Event with mouse position
    */
   positionContextMenu(menu, e) {
+    // Menu might not be in DOM yet, so we need to temporarily add it to get dimensions
+    const wasInDOM = menu.parentElement !== null;
+    if (!wasInDOM) {
+      menu.style.visibility = 'hidden';
+      menu.style.position = 'fixed';
+      document.body.appendChild(menu);
+    }
+    
     const rect = menu.getBoundingClientRect();
+    
+    // Get the sidebar container bounds
+    const container = document.querySelector('.you-tabs-container') || document.body;
+    const containerRect = container.getBoundingClientRect();
+    
     let x = e.clientX;
     let y = e.clientY;
     
-    // Adjust if menu goes off screen
-    if (x + rect.width > window.innerWidth) {
-      x = window.innerWidth - rect.width - 8;
+    // Check if menu would go off the right edge - open to the left instead
+    if (x + rect.width > containerRect.right) {
+      // Try opening to the left of the click position
+      const leftSpace = x - containerRect.left;
+      
+      if (leftSpace > rect.width + 10) {
+        // There's enough space on the left, open left
+        x = x - rect.width - 8;
+      } else {
+        // Not enough space on left either, use right edge as fallback
+        x = containerRect.right - rect.width - 8;
+      }
     }
-    if (y + rect.height > window.innerHeight) {
-      y = window.innerHeight - rect.height - 8;
+    
+    // Also check if too far left
+    if (x < containerRect.left) {
+      x = containerRect.left + 8;
+    }
+    
+    // Check vertical boundaries
+    if (y + rect.height > containerRect.bottom) {
+      y = containerRect.bottom - rect.height - 8;
+    }
+    if (y < containerRect.top) {
+      y = containerRect.top + 8;
+    }
+    
+    // Remove from DOM if it wasn't there before, then add it back positioned
+    if (!wasInDOM) {
+      document.body.removeChild(menu);
+      menu.style.visibility = '';
     }
     
     menu.style.left = `${x}px`;
@@ -1308,7 +1346,7 @@ class UIRenderer {
     if (!group) return;
     
     const newName = await this.showPrompt('Rename Group', 'Enter new group name:', group.name);
-    if (newName && newName.trim() !== '') {
+    if (newName && typeof newName === 'string' && newName.trim() !== '') {
       await this.options.onRenameCustomGroup(groupId, newName.trim());
     }
   }

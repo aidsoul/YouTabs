@@ -80,6 +80,12 @@ body.full-height {
   box-sizing: border-box;
   background: var(--bg-active);
   flex: 1 1 auto;
+  position: relative;
+}
+
+/* Ensure body in sidebar can scroll if needed */
+body {
+  overflow: hidden;
 }
 
 /* Header - style */
@@ -582,12 +588,62 @@ body.full-height {
   .tabs-scroll-container {
     padding: 6px 10px;
   }
-  
+
   .tab-item {
     padding: 0 10px 0 4px;
   }
 }
 
+/* Extra small screens (mobile) */
+@media (max-width: 320px) {
+  .you-tabs-container {
+    min-width: 100%;
+  }
+  
+  .tabs-header {
+    padding: 8px 10px;
+  }
+  
+  .search-container {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+  
+  .tabs-actions {
+    flex: 0 0 auto;
+  }
+  
+  .tab-count {
+    display: none;
+  }
+}
+
+/* Small screens (mobile landscape) */
+@media (min-width: 321px) and (max-width: 480px) {
+  .you-tabs-container {
+    min-width: 280px;
+  }
+  
+  .tabs-header {
+    padding: 10px 12px;
+  }
+  
+  .search-container {
+    flex: 1 1 auto;
+    min-width: 150px;
+  }
+}
+
+/* Medium screens (tablet) */
+@media (min-width: 481px) and (max-width: 768px) {
+  .you-tabs-container {
+    min-width: 320px;
+  }
+  
+  .tabs-header {
+    padding: 12px 14px;
+  }
+}
 /* Full-height popup - vertical tabs with adaptive sizing */
 body.full-height .tabs-list {
   flex-direction: column;
@@ -2044,12 +2100,14 @@ body.full-height .tab-item:hover {
   position: fixed;
   z-index: 10000;
   min-width: 160px;
+  max-width: calc(100vw - 40px);
   background: var(--bg-active);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 16px var(--shadow-medium);
   padding: 4px 0;
   font-size: 13px;
+  overflow: visible;
 }
 
 /* Custom Modal Overlay */
@@ -2199,11 +2257,11 @@ body.full-height .tab-item:hover {
 
 .modal-btn-confirm {
   background: var(--accent-color);
-  color: #212326;
+  color: #ffffff;
 }
 
 .modal-btn-confirm:hover {
-  background: #e6b800;
+  background: #2d5cc8;
 }
 
 .modal-btn-danger {
@@ -2212,7 +2270,7 @@ body.full-height .tab-item:hover {
 }
 
 .modal-btn-danger:hover {
-  background: #e64646;
+  background: #c53030;
 }
 
 /* Dark theme support for modal */
@@ -2257,6 +2315,24 @@ body.dark-theme .modal-btn-cancel {
 
 body.dark-theme .modal-btn-cancel:hover {
   background: #4a4a4a;
+}
+
+body.dark-theme .modal-btn-confirm {
+  background: var(--accent-color);
+  color: #ffffff;
+}
+
+body.dark-theme .modal-btn-confirm:hover {
+  background: #4a8aff;
+}
+
+body.dark-theme .modal-btn-danger {
+  background: #dc3545;
+  color: #ffffff;
+}
+
+body.dark-theme .modal-btn-danger:hover {
+  background: #c82333;
 }
 
 body.dark-theme .modal-footer {
@@ -2329,6 +2405,16 @@ body.dark-theme .modal-footer {
   border-radius: 8px;
   box-shadow: 0 4px 16px var(--shadow-medium);
   padding: 4px 0;
+  z-index: 10001;
+}
+
+/* Handle submenu overflow - show to the left if no space on right */
+.context-menu-item.has-submenu {
+  position: relative;
+}
+
+.context-menu-item.has-submenu > .context-submenu {
+  /* Will be positioned by JS if needed, but default shows right */
 }
 
 .context-menu-search {
