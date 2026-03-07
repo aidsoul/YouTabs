@@ -42,6 +42,59 @@ browser.runtime.onStartup.addListener(() => {
   console.log('YouTabs extension started');
 });
 
+// Handle keyboard commands
+browser.commands.onCommand.addListener(async (command) => {
+  if (command === 'toggle-search') {
+    await openSearchPopup();
+  }
+});
+
+// Search popup state
+let searchPopupWindowId = null;
+
+// Open search popup window
+async function openSearchPopup() {
+  try {
+    // If popup already exists, focus it
+    if (searchPopupWindowId) {
+      try {
+        await browser.windows.update(searchPopupWindowId, { focused: true });
+        return;
+      } catch (e) {
+        // Window was closed, reset ID
+        searchPopupWindowId = null;
+      }
+    }
+    
+    // Get current window to position popup relative to it
+    const currentWindow = await browser.windows.getCurrent();
+    
+    // Create popup window for search
+    const popupWindow = await browser.windows.create({
+      url: 'search-popup.html',
+      type: 'popup',
+      width: POPUP_MAX_WIDTH,
+      height: 500,
+      left: Math.round(currentWindow.left + (currentWindow.width - POPUP_MAX_WIDTH) / 2),
+      top: Math.round(currentWindow.top + 100)
+    });
+    
+    searchPopupWindowId = popupWindow.id;
+    
+    // Listen for popup close
+    browser.windows.onRemoved.addListener(function onWindowRemoved(windowId) {
+      if (windowId === searchPopupWindowId) {
+        searchPopupWindowId = null;
+        browser.windows.onRemoved.removeListener(onWindowRemoved);
+      }
+    });
+    
+    console.log('YouTabs: Search popup opened');
+  } catch (error) {
+    console.error('YouTabs: Error opening search popup:', error);
+  }
+}
+
 // Handle messages from popup or other scripts
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'getTabs') {

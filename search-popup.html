@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTabs Search</title>
+  <link rel="stylesheet" href="css/search-popup.css">
+</head>
+<body>
+  <div class="search-popup-container">
+    <div class="search-popup-header">
+      <div class="search-popup-input-wrapper">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input type="text" id="searchPopupInput" placeholder="Search tabs, pages, headings..." autocomplete="off" autofocus>
+      </div>
+    </div>
+    <div class="search-popup-results" id="tabsList">
+      <div class="search-loading">
+        <div class="spinner"></div>
+        <p>Loading tabs...</p>
+      </div>
+    </div>
+    <div class="search-footer">
+      <div class="search-hint">
+        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+        <span><kbd>Enter</kbd> Open</span>
+        <span><kbd>Esc</kbd> Close</span>
+      </div>
+      <span class="result-count" id="tabCount">0 results</span>
+    </div>
+  </div>
+
+  <script src="js/db.js"></script>
+  <script src="js/settings-manager.js"></script>
+  <script src="js/content-extractor.js"></script>
+  <script src="js/core/TabManager.js"></script>
+  <script src="js/core/GroupManager.js"></script>
+  <script src="js/core/SearchEngine.js"></script>
+  <script src="js/core/DragDropManager.js"></script>
+  <script src="js/core/UIRenderer.js"></script>
+  <script src="js/tabs-core.js"></script>
+  <script src="js/search-popup.js"></script>
+</body>
+</html>

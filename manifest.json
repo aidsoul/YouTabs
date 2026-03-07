@@ -35,7 +35,8 @@
     "storage",
     "scripting",
     "contextMenus",
-    "notifications"
+    "notifications",
+    "commands"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -67,5 +68,13 @@
   },
   "omnibox": {
     "keyword": "yt"
+  },
+  "commands": {
+    "toggle-search": {
+      "suggested_key": {
+        "default": "F2"
+      },
+      "description": "Open indexed search popup"
+    }
   }
 }
