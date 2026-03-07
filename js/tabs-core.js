@@ -38,6 +38,29 @@ function debounce(func, wait) {
   };
 }
 
+// Helper function to get icon URL for notifications
+function getNotificationIconUrl() {
+  try {
+    return browser.runtime.getManifest()?.icons?.['48'] || 'icons/48.png';
+  } catch (e) {
+    return 'icons/48.png';
+  }
+}
+
+// Helper function to show a notification using Firefox notifications API
+function showNotification(message, title = 'YouTabs') {
+  try {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: getNotificationIconUrl(),
+      title: title,
+      message: message
+    });
+  } catch (error) {
+    console.warn('YouTabs: Notification API not available:', error);
+  }
+}
+
 
 class YouTabsCore {
   // Static filter type definitions
@@ -388,16 +411,21 @@ class YouTabsCore {
       this.renderTabs();
     });
     
-    this.groupManager.on('groupCreated', () => {
+    this.groupManager.on('groupCreated', ({ group }) => {
+      this.renderTabs();
+      // Show notification for group creation
+      showNotification(`Group  "${group.name}" was deleted`);
+    });
+    
+    this.groupManager.on('groupUpdated', ({ group, changes }) => {
       this.renderTabs();
     });
     
-    this.groupManager.on('groupUpdated', () => {
+    this.groupManager.on('groupDeleted', ({ groupId, deletedGroups, deletedCount }) => {
       this.renderTabs();
-    });
-    
-    this.groupManager.on('groupDeleted', () => {
-      this.renderTabs();
+      // Show notification for group deletion
+      const groupNames = deletedGroups.map(g => g.name).join(', ');
+      showNotification(`Group "${groupNames}" ${deletedCount > 1 ? 'deleted' : 'removed'}`);
     });
     
     this.groupManager.on('tabAddedToGroup', () => {
