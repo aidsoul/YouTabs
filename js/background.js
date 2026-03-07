@@ -580,3 +580,257 @@ function getUrlKey(url) {
     return url;
   }
 }
+
+// ==================== Omnibox Search Functionality ====================
+
+// Initialize SearchEngine for omnibox
+let cachedTabs = [];
+let cachedCustomNames = {};
+let cachedGroupHierarchy = {};
+
+// Initialize SearchEngine for omnibox
+async function initOmniboxSearchEngine() {
+  if (window.omniboxSearchEngine) {
+    // Update cached tabs
+    cachedTabs = await browser.tabs.query({});
+    return window.omniboxSearchEngine;
+  }
+  
+  // Wait for DB to be ready
+  if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+    await window.YouTabsDB.openDatabase();
+  }
+  
+  // Get current tabs synchronously from cache
+  cachedTabs = await browser.tabs.query({});
+  
+  // Get and cache custom tab names
+  try {
+    const customGroups = await window.YouTabsDB.getCustomGroups();
+    for (const group of customGroups) {
+      if (group.tabs && Array.isArray(group.tabs)) {
+        for (const tabInfo of group.tabs) {
+          if (tabInfo.customName) {
+            cachedCustomNames[tabInfo.tabId] = { customName: tabInfo.customName };
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Omnibox: Could not get custom names', e);
+  }
+  
+  // Get and cache group hierarchy
+  try {
+    const groupTabMetadata = await window.YouTabsDB.getGroupTabMetadata();
+    if (groupTabMetadata && groupTabMetadata.groups) {
+      for (const [groupId, group] of Object.entries(groupTabMetadata.groups)) {
+        if (group.tabs && Array.isArray(group.tabs)) {
+          for (const tabId of group.tabs) {
+            if (!cachedGroupHierarchy[tabId]) {
+              cachedGroupHierarchy[tabId] = [];
+            }
+            cachedGroupHierarchy[tabId].push(group.name || '');
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Omnibox: Could not get group metadata', e);
+  }
+  
+  // Synchronous callbacks
+  const getTabs = () => cachedTabs;
+  const getCustomTabNames = () => cachedCustomNames;
+  const getGroupHierarchyNames = (tabId) => cachedGroupHierarchy[tabId] || [];
+  
+  window.omniboxSearchEngine = new SearchEngine({
+    settings: { enablePageSearch: true, maxSearchResults: 15 },
+    getTabs: getTabs,
+    getCustomTabNames: getCustomTabNames,
+    getGroupHierarchyNames: getGroupHierarchyNames,
+    onSearchResults: null,
+    onError: (error) => console.error('Omnibox SearchEngine error:', error)
+  });
+  
+  // Load page headings from IndexedDB
+  await window.omniboxSearchEngine.loadPageHeadings();
+  
+  return window.omniboxSearchEngine;
+}
+
+// Search using SearchEngine for omnibox
+async function searchIndexedData(query) {
+  try {
+    const searchEngine = await initOmniboxSearchEngine();
+    
+    // Perform search synchronously (no debounce)
+    await searchEngine._performSearch(query);
+    
+    // Get results
+    const tabs = searchEngine.getFilteredTabs();
+    const headings = searchEngine.getHeadingSearchResults();
+    
+    // Get open tabs for URL matching
+    const allTabs = await browser.tabs.query({});
+    
+    // Enrich tab results
+    const tabResults = tabs.map(tab => ({
+      type: 'tab',
+      url: tab.url,
+      title: tab.title,
+      tabId: tab.id,
+      windowId: tab.windowId,
+      score: 5,
+      isActive: tab.active
+    }));
+    
+    // Enrich heading results
+    const headingResults = headings.map(heading => {
+      // Check if tab is open
+      const matchingTab = allTabs.find(t => {
+        try {
+          const tUrl = t.url || '';
+          return tUrl.includes(heading.pageUrl) || heading.pageUrl.includes(tUrl);
+        } catch {
+          return false;
+        }
+      });
+      
+      let pageTitle = '';
+      try {
+        const urlObj = new URL(heading.pageUrl);
+        pageTitle = urlObj.hostname;
+      } catch (e) {
+        pageTitle = heading.pageUrl;
+      }
+      
+      return {
+        type: 'heading',
+        url: heading.url,
+        pageUrl: heading.pageUrl,
+        text: heading.text,
+        headingType: heading.type,
+        isTabOpen: !!matchingTab,
+        tabId: matchingTab ? matchingTab.id : null,
+        score: heading.relevance || 1,
+        pageTitle: pageTitle
+      };
+    });
+    
+    return {
+      tabs: tabResults,
+      headings: headingResults
+    };
+  } catch (error) {
+    console.error('Omnibox search error:', error);
+    return { tabs: [], headings: [] };
+  }
+}
+
+// Handle input changes - provide suggestions
+browser.omnibox.onInputChanged.addListener(async (query, suggestFn) => {
+
+  try {
+    const searchResults = await searchIndexedData(query);
+    const { tabs, headings } = searchResults;
+    
+    if (tabs.length === 0 && headings.length === 0) {
+      // No results found - don't show any suggestions
+      return;
+    }
+    
+    const suggestions = [];
+    
+    // Add tab results first (with higher priority)
+    for (const result of tabs) {
+      if (!result.url) continue;
+      
+      const title = result.title || result.url;
+      const description = `${title.substring(0, 60)}${title.length > 60 ? '...' : ''}`;
+      
+      suggestions.push({
+        content: result.url,
+        description: description
+      });
+    }
+    
+    // Add heading results
+    for (const result of headings) {
+      // Use pageUrl as fallback for url, and text or pageTitle for display
+      const url = result.url || result.pageUrl;
+      if (!url) continue;
+      
+      const displayText = result.text || result.pageTitle || 'Unknown';
+      const description = `${displayText.substring(0, 60)}${displayText.length > 60 ? '...' : ''} (${result.pageTitle || 'unknown'})`;
+      
+      suggestions.push({
+        content: result.pageUrl,
+        description: description
+      });
+    }
+    
+    suggestFn(suggestions);
+  } catch (error) {
+    console.error('Omnibox onInputChanged error:', error);
+    suggestFn([{
+      content: '',
+      description: 'Error searching: ' + error.message
+    }]);
+  }
+});
+
+// Handle user selection - navigate to URL
+browser.omnibox.onInputEntered.addListener(async (content, disposition) => {
+  if (!content) return;
+  
+  // Check if it's the default suggestion or not a URL - redirect to Google
+  if (content === 'Search YouTabs indexed pages...' || !content.startsWith('http')) {
+    browser.tabs.create({ url: 'https://www.google.com/search?q=' + encodeURIComponent(content) });
+    return;
+  }
+  
+  // Try to parse JSON content (new format with type info)
+  let url = content;
+  
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && parsed.url) {
+      url = parsed.url;
+    }
+  } catch (e) {
+    // Not JSON, treat as plain URL
+  }
+  
+  if (!url) return;
+  // Check if it's a valid URL
+  try {
+    // Check if there's an open tab with this URL
+    browser.tabs.query({ url: url }).then(tabs => {
+      if (tabs && tabs.length > 0) {
+        // Activate existing tab
+        if (disposition === 'currentTab') {
+          browser.tabs.update(tabs[0].id, { active: true });
+        } else {
+          browser.tabs.update(tabs[0].id, { active: true });
+          browser.windows.update(tabs[0].windowId, { focused: true });
+        }
+      } else {
+        // Open new tab
+        if (disposition === 'newForegroundTab') {
+          browser.tabs.create({ url: url, active: true });
+        } else if (disposition === 'newBackgroundTab') {
+          browser.tabs.create({ url: url, active: false });
+        } else {
+          browser.tabs.create({ url: url, active: true });
+        }
+      }
+    }).catch(error => {
+      console.error('Error handling omnibox input:', error);
+      // Fallback: just create a new tab
+      browser.tabs.create({ url: url, active: true });
+    });
+  } catch (e) {
+    console.error('Invalid URL from omnibox:', url, e);
+  }
+});

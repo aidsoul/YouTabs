@@ -48,7 +48,7 @@
     }
   ],
   "background": {
-    "scripts": ["js/db.js", "js/settings-manager.js", "js/background.js"]
+    "scripts": ["js/db.js", "js/settings-manager.js", "js/core/SearchEngine.js", "js/background.js"]
   },
   "web_accessible_resources": [
     {
@@ -64,5 +64,8 @@
         "required": ["none"]
       }
     }
+  },
+  "omnibox": {
+    "keyword": "yt"
   }
 }
