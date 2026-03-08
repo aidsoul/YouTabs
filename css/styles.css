@@ -81,6 +81,7 @@ body.full-height {
   background: var(--bg-active);
   flex: 1 1 auto;
   position: relative;
+  resize: none;
 }
 
 /* Ensure body in sidebar can scroll if needed */
