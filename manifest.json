@@ -35,8 +35,7 @@
     "storage",
     "scripting",
     "contextMenus",
-    "notifications",
-    "commands"
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>"
