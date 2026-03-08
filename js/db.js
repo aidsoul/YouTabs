@@ -100,11 +100,9 @@ async function saveCustomGroups(customGroups) {
     const transaction = db.transaction([STORE_CUSTOM_GROUPS], 'readwrite');
     const store = transaction.objectStore(STORE_CUSTOM_GROUPS);
     
-    // Clear existing data and add new data
-    store.clear();
-    
+    // Use put for all items in a single transaction (more efficient than clear + add)
     for (const group of customGroups) {
-      store.add(group);
+      store.put(group);
     }
 
     transaction.oncomplete = () => {
@@ -168,7 +166,7 @@ async function saveGroupTabMetadata(metadata) {
 
 /**
  * Get pagesIndex from IndexedDB
- * @returns {Promise<Object>} - Returns object with tabId as keys and headings array as values
+ * @returns {Promise<Object>} - Returns object with url as keys and headings array as values
  */
 async function getPagesIndex() {
   const db = await openDatabase();
@@ -182,7 +180,8 @@ async function getPagesIndex() {
       const results = request.result || [];
       const pageIndex = {};
       for (const item of results) {
-        pageIndex[item.tabId] = item.headings;
+        // Use url as key (matching the keyPath in the store)
+        pageIndex[item.url] = item.headings;
       }
       resolve(pageIndex);
     };

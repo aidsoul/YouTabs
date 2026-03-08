@@ -64,7 +64,8 @@ class SearchEngine {
   }
   
   // ==================== Static Fuzzy Search Helpers ====================
-  
+  // Now uses global SearchUtils from search-utils.js (loaded in manifest)
+
   /**
    * Calculate Levenshtein distance between two strings
    * @param {string} str1 - First string
@@ -73,45 +74,30 @@ class SearchEngine {
    * @returns {number} The Levenshtein distance
    */
   static levenshteinDistance(str1, str2, maxDist = Infinity) {
+    return window.SearchUtils?.levenshteinDistance(str1, str2, maxDist) ?? 
+      SearchEngine._inlineLevenshtein(str1, str2, maxDist);
+  }
+
+  /**
+   * Inline Levenshtein implementation as fallback
+   * @private
+   */
+  static _inlineLevenshtein(str1, str2, maxDist = Infinity) {
     const m = str1.length;
     const n = str2.length;
-    
-    // Early termination: if length difference is too large, no need to compute
-    if (Math.abs(m - n) > maxDist) {
-      return maxDist + 1;
-    }
-    
-    // Create matrix
+    if (Math.abs(m - n) > maxDist) return maxDist + 1;
     const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    
-    // Initialize first column
-    for (let i = 0; i <= m; i++) {
-      dp[i][0] = i;
-    }
-    
-    // Initialize first row
-    for (let j = 0; j <= n; j++) {
-      dp[0][j] = j;
-    }
-    
-    // Fill the matrix
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
     for (let i = 1; i <= m; i++) {
       for (let j = 1; j <= n; j++) {
-        if (str1[i - 1] === str2[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = 1 + Math.min(
-            dp[i - 1][j],     // deletion
-            dp[i][j - 1],     // insertion
-            dp[i - 1][j - 1]  // substitution
-          );
-        }
+        if (str1[i - 1] === str2[j - 1]) dp[i][j] = dp[i - 1][j - 1];
+        else dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
       }
     }
-    
     return dp[m][n];
   }
-  
+
   /**
    * Perform fuzzy matching between query and text
    * @param {string} query - Search query
@@ -120,69 +106,49 @@ class SearchEngine {
    * @returns {Object} Match result with match, distance, and score properties
    */
   static fuzzyMatch(query, text, maxDistance = 2) {
+    return window.SearchUtils?.fuzzyMatch(query, text, maxDistance) ?? 
+      SearchEngine._inlineFuzzyMatch(query, text, maxDistance);
+  }
+
+  /**
+   * Inline fuzzy match implementation as fallback
+   * @private
+   */
+  static _inlineFuzzyMatch(query, text, maxDistance = 2) {
     const lowerQuery = query.toLowerCase();
     const lowerText = text.toLowerCase();
-    
-    // Exact match
-    if (lowerText.includes(lowerQuery)) {
-      return { match: true, distance: 0, score: 1 };
-    }
-    
-    // Word-based matching - check if query words are in text
+    if (lowerText.includes(lowerQuery)) return { match: true, distance: 0, score: 1 };
     const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
     const textWords = lowerText.split(/\s+/).filter(w => w.length > 0);
-    
     if (queryWords.length > 0 && textWords.length > 0) {
       let allWordsFound = true;
       let totalWordDistance = 0;
-      
       for (const qWord of queryWords) {
         let minDist = Infinity;
-        
         for (const tWord of textWords) {
-          // Exact word match - no need to compute distance
-          if (tWord === qWord) {
-            minDist = 0;
-            break;
-          }
-          // Skip Levenshtein if length difference is too large
+          if (tWord === qWord) { minDist = 0; break; }
           if (Math.abs(tWord.length - qWord.length) <= maxDistance) {
-            const dist = SearchEngine.levenshteinDistance(qWord, tWord, maxDistance);
-            if (dist < minDist) {
-              minDist = dist;
-            }
-            // Early termination if exact match found
+            const dist = SearchEngine._inlineLevenshtein(qWord, tWord, maxDistance);
+            if (dist < minDist) { minDist = dist; }
             if (minDist === 0) break;
           }
         }
-        
-        if (minDist <= maxDistance) {
-          totalWordDistance += minDist;
-        } else {
-          allWordsFound = false;
-          break;
-        }
+        if (minDist <= maxDistance) { totalWordDistance += minDist; }
+        else { allWordsFound = false; break; }
       }
-      
       if (allWordsFound) {
         const avgDistance = totalWordDistance / queryWords.length;
-        const score = Math.max(0, 1 - avgDistance / (maxDistance + 1));
-        return { match: true, distance: avgDistance, score };
+        return { match: true, distance: avgDistance, score: Math.max(0, 1 - avgDistance / (maxDistance + 1)) };
       }
     }
-    
-    // Check if entire query is close to text using Levenshtein
     if (lowerText.length > 0 && lowerQuery.length > 0 && 
         Math.abs(lowerText.length - lowerQuery.length) <= Math.max(lowerQuery.length * 0.5, maxDistance)) {
-      const dist = SearchEngine.levenshteinDistance(lowerQuery, lowerText, maxDistance);
+      const dist = SearchEngine._inlineLevenshtein(lowerQuery, lowerText, maxDistance);
       const maxAllowed = Math.max(maxDistance, Math.floor(lowerQuery.length * 0.4));
-      
       if (dist <= maxAllowed) {
-        const score = Math.max(0, 1 - dist / (maxAllowed + 1));
-        return { match: true, distance: dist, score };
+        return { match: true, distance: dist, score: Math.max(0, 1 - dist / (maxAllowed + 1)) };
       }
     }
-    
     return { match: false, distance: Infinity, score: 0 };
   }
   

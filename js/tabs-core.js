@@ -26,17 +26,19 @@ function extractHeadings(settings) {
 }
 
 // Debounce utility function
+// Note: Uses global SearchUtils from search-utils.js which is loaded before this file
 function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
+  return window.SearchUtils ? window.SearchUtils.debounce(func, wait) : 
+    ((...args) => {
+      let timeout;
+      const later = () => { clearTimeout(timeout); func(...args); };
       clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
+      timeout = setTimeout(later, wait);
+    });
 }
+
+// Reference to global SearchUtils (loaded from js/utils/search-utils.js)
+const SearchUtils = window.SearchUtils;
 
 // Helper function to get icon URL for notifications
 function getNotificationIconUrl() {
@@ -113,114 +115,13 @@ class YouTabsCore {
     `).join('');
   }
 
-  // Static fuzzy search helpers
+  // Static fuzzy search helpers - delegate to shared SearchUtils
   static levenshteinDistance(str1, str2, maxDist = Infinity) {
-    const m = str1.length;
-    const n = str2.length;
-    
-    // Early termination: if length difference is too large, no need to compute
-    // This is an optimization for fuzzy matching
-    if (Math.abs(m - n) > maxDist) {
-      return maxDist + 1; // Return value greater than maxDist to trigger early rejection
-    }
-    
-    // Create matrix
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    
-    // Initialize first column
-    for (let i = 0; i <= m; i++) {
-      dp[i][0] = i;
-    }
-    
-    // Initialize first row
-    for (let j = 0; j <= n; j++) {
-      dp[0][j] = j;
-    }
-    
-    // Fill the matrix
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (str1[i - 1] === str2[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = 1 + Math.min(
-            dp[i - 1][j],     // deletion
-            dp[i][j - 1],     // insertion
-            dp[i - 1][j - 1]  // substitution
-          );
-        }
-      }
-    }
-    
-    return dp[m][n];
+    return SearchUtils.levenshteinDistance(str1, str2, maxDist);
   }
 
   static fuzzyMatch(query, text, maxDistance = 2) {
-    const lowerQuery = query.toLowerCase();
-    const lowerText = text.toLowerCase();
-    
-    // Exact match
-    if (lowerText.includes(lowerQuery)) {
-      return { match: true, distance: 0, score: 1 };
-    }
-    
-    // Word-based matching - check if query words are in text
-    const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
-    const textWords = lowerText.split(/\s+/).filter(w => w.length > 0);
-    
-    if (queryWords.length > 0 && textWords.length > 0) {
-      let allWordsFound = true;
-      let totalWordDistance = 0;
-      
-      for (const qWord of queryWords) {
-        let minDist = Infinity;
-        
-        for (const tWord of textWords) {
-          // Exact word match - no need to compute distance
-          if (tWord === qWord) {
-            minDist = 0;
-            break;
-          }
-          // Skip Levenshtein if length difference is too large
-          if (Math.abs(tWord.length - qWord.length) <= maxDistance) {
-            const dist = YouTabsCore.levenshteinDistance(qWord, tWord, maxDistance);
-            if (dist < minDist) {
-              minDist = dist;
-            }
-            // Early termination if exact match found
-            if (minDist === 0) break;
-          }
-        }
-        
-        if (minDist <= maxDistance) {
-          totalWordDistance += minDist;
-        } else {
-          allWordsFound = false;
-          break; // Early termination - word not found within threshold
-        }
-      }
-      
-      if (allWordsFound) {
-        const avgDistance = totalWordDistance / queryWords.length;
-        const score = Math.max(0, 1 - avgDistance / (maxDistance + 1));
-        return { match: true, distance: avgDistance, score };
-      }
-    }
-    
-    // Check if entire query is close to text using Levenshtein
-    // Only compute if length difference is reasonable (within 50%)
-    if (lowerText.length > 0 && lowerQuery.length > 0 && 
-        Math.abs(lowerText.length - lowerQuery.length) <= Math.max(lowerQuery.length * 0.5, maxDistance)) {
-      const dist = YouTabsCore.levenshteinDistance(lowerQuery, lowerText, maxDistance);
-      const maxAllowed = Math.max(maxDistance, Math.floor(lowerQuery.length * 0.4));
-      
-      if (dist <= maxAllowed) {
-        const score = Math.max(0, 1 - dist / (maxAllowed + 1));
-        return { match: true, distance: dist, score };
-      }
-    }
-    
-    return { match: false, distance: Infinity, score: 0 };
+    return SearchUtils.fuzzyMatch(query, text, maxDistance);
   }
   
   constructor(options = {}) {
@@ -414,7 +315,7 @@ class YouTabsCore {
     this.groupManager.on('groupCreated', ({ group }) => {
       this.renderTabs();
       // Show notification for group creation
-      showNotification(`Group  "${group.name}" was deleted`);
+      showNotification(`Group "${group.name}" was created`);
     });
     
     this.groupManager.on('groupUpdated', ({ group, changes }) => {
