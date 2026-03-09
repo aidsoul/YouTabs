@@ -6,6 +6,10 @@
 class SettingsManager {
   // Default settings
     static defaultSettings = {
+    // Theme settings
+    theme: 'light', // 'light' or 'dark'
+    
+    // Display settings
     showFavicon: true,
     showAudio: true,
     closeOnSelect: true,

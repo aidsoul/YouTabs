@@ -1,0 +1,497 @@
+/* YouTabs Extension - Dark Theme */
+/* This file contains dark theme CSS variables */
+
+:root {
+  /* Dark theme color palette - Dark Gray */
+  --bg-inactive: #1e1e1e;
+  --bg-active: #252525;
+  --bg-hover: #2f2f2f;
+  --bg-dark-hover: #3a3a3a;
+  --close-default: #808080;
+  --close-hover: #ff6b6b;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --border-color: #404040;
+  --scrollbar-color: #555555;
+  --accent-color: #6da6ff;
+  --shadow-light: rgba(0, 0, 0, 0.3);
+  --shadow-medium: rgba(0, 0, 0, 0.4);
+  --shadow-large: rgba(0, 0, 0, 0.5);
+  
+  /* Browser blue tones - Dark theme */
+  --yb-blue: #6da6ff;
+  --yb-blue-light: #1e2a38;
+  --yb-blue-hover: #8ab4ff;
+  --yb-green: #4ade80;
+  --yb-orange: #fbbf24;
+  --yb-red: #f87171;
+  
+  /* Tree Style Tab colors - Dark theme */
+  --tree-line-color: #404040;
+  --tree-line-active: #fbbf24;
+}
+
+/* Additional dark theme specific styles */
+body {
+  background: #1e1e1e;
+  color: var(--text-primary);
+}
+
+.you-tabs-container {
+  background: var(--bg-active);
+}
+
+.tabs-header {
+  background: var(--bg-active);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.settings-sidebar {
+  background: #1e1e1e !important;
+}
+
+/* Ensure proper text colors */
+.settings-search input {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.settings-section {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+}
+
+/* Navigation */
+.settings-nav-item:hover {
+  background: rgba(109, 166, 255, 0.1) !important;
+  color: var(--text-primary) !important;
+}
+
+.settings-nav-item.active {
+  background: rgba(109, 166, 255, 0.15) !important;
+  color: var(--accent-color) !important;
+  border-left-color: var(--accent-color) !important;
+}
+
+/* Settings items */
+.settings-item:hover {
+  background: rgba(109, 166, 255, 0.06) !important;
+}
+
+.settings-item.highlighted {
+  background: rgba(109, 166, 255, 0.1) !important;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-inactive);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--close-default);
+}
+
+/* Toggle switch dark theme */
+.toggle-switch {
+  background: var(--bg-inactive);
+}
+
+.toggle-switch.active {
+  background: var(--accent-color);
+}
+
+/* Input elements dark theme */
+.settings-input {
+  background: var(--bg-inactive);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.settings-input:focus {
+  border-color: var(--accent-color);
+}
+
+/* Select elements dark theme */
+.settings-select {
+  background: var(--bg-active) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Section header */
+.settings-section-header {
+  border-bottom-color: var(--border-color) !important;
+}
+
+/* Labels and text */
+.settings-label {
+  color: var(--text-primary) !important;
+}
+
+.settings-description {
+  color: var(--text-secondary) !important;
+}
+
+.settings-section-title {
+  color: var(--text-primary) !important;
+}
+
+.settings-section-description {
+  color: var(--text-secondary) !important;
+}
+
+.settings-page-title {
+  color: var(--text-primary) !important;
+}
+
+.settings-subtitle {
+  color: var(--text-secondary) !important;
+}
+
+.settings-sidebar-title {
+  color: var(--text-primary) !important;
+}
+
+/* Reset button */
+.settings-reset-btn {
+  background: var(--bg-active) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.settings-reset-btn:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-hover) !important;
+}
+
+/* Search icon */
+.settings-search-icon {
+  color: var(--text-secondary) !important;
+}
+
+/* Footer */
+.settings-footer {
+  border-top-color: var(--border-color) !important;
+}
+
+.version-info {
+  color: var(--text-secondary) !important;
+}
+
+.version-info a {
+  color: var(--accent-color) !important;
+}
+
+/* Tab items - Dark background */
+.tab-item {
+  background: #1a1a1a !important;
+  border-bottom-color: #333333 !important;
+}
+
+.tab-item:hover {
+  background: #252525 !important;
+}
+
+.tab-title {
+  color: #e0e0e0 !important;
+}
+
+.tab-url {
+  color: #888888 !important;
+}
+
+/* Scroll container - Dark background */
+#tabsScrollContainer,
+.tabs-scroll-container,
+.scroll-container {
+  background: #181818 !important;
+}
+
+/* Groups - Dark background */
+.group-header {
+  background: #151515 !important;
+  border-bottom-color: #333333 !important;
+}
+
+.group-title {
+  color: #e0e0e0 !important;
+}
+
+.group-item,
+.group-content {
+  background: #1a1a1a !important;
+}
+
+/* Nested groups */
+.nested-group {
+  background: #151515 !important;
+}
+
+/* Main container - Dark background */
+.you-tabs-container,
+.tabs-container {
+  background: #181818 !important;
+}
+
+/* Tabs list - Dark background */
+#tabsList,
+.tabs-list {
+  background: #181818 !important;
+}
+
+/* Search input in popup */
+#searchInput {
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+#searchInput::placeholder {
+  color: var(--text-secondary) !important;
+}
+
+/* Buttons */
+button {
+  color: var(--text-primary);
+}
+
+button:hover {
+  background: var(--bg-hover);
+}
+
+/* Modal */
+.modal-content {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+}
+
+/* Tree lines */
+.tree-line {
+  background: var(--tree-line-color);
+}
+
+/* Audio indicator */
+.audio-icon {
+  color: var(--accent-color);
+}
+
+/* Context menu */
+.context-menu {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-large);
+}
+
+.context-menu-item {
+  color: var(--text-primary);
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+/* Filter modal */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+}
+
+.modal-header {
+  border-bottom-color: var(--border-color);
+}
+
+.modal-title {
+  color: var(--text-primary);
+}
+
+.modal-close {
+  color: var(--text-secondary);
+}
+
+.modal-footer {
+  border-top-color: var(--border-color);
+}
+
+/* Tab groups - Dark theme */
+.tab-group-header {
+  background: #2a2a2a !important;
+}
+
+/* Don't override border-color for custom groups - they use inline styles */
+.tab-group:not([data-group-key^="custom"]) .tab-group-header {
+  border-color: #404040 !important;
+}
+
+.tab-group-header:hover {
+  background: #333333 !important;
+  border-color: #4a4a4a !important;
+}
+
+.tab-group-header.active {
+  background: #252525 !important;
+  border-color: var(--accent-color) !important;
+}
+
+/* Group name */
+.tab-group-name {
+  color: #e0e0e0 !important;
+}
+
+/* Group count badge */
+.tab-group-count {
+  background: #1a1a1a !important;
+  color: #a0a0a0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Group toggle button */
+.tab-group-toggle {
+  color: #888888 !important;
+}
+
+.tab-group-toggle:hover {
+  background: #3a3a3a !important;
+  color: #e0e0e0 !important;
+}
+
+/* Group domain */
+.tab-group-domain {
+  color: #888888 !important;
+}
+
+/* Group auto label */
+.tab-group-auto {
+  background: #2d2d2d !important;
+  color: #a0a0a0 !important;
+  box-shadow: none !important;
+}
+
+/* Color category styles - Dark theme (adjusted for visibility) */
+.tab-group[data-group-key="red"] .tab-group-header {
+  border-left: 3px solid #ff5252 !important;
+}
+
+.tab-group[data-group-key="orange"] .tab-group-header {
+  border-left: 3px solid #ff9800 !important;
+}
+
+.tab-group[data-group-key="yellow"] .tab-group-header {
+  border-left: 3px solid #ffc107 !important;
+}
+
+.tab-group[data-group-key="green"] .tab-group-header {
+  border-left: 3px solid #4caf50 !important;
+}
+
+.tab-group[data-group-key="blue"] .tab-group-header {
+  border-left: 3px solid #2196f3 !important;
+}
+
+.tab-group[data-group-key="purple"] .tab-group-header {
+  border-left: 3px solid #9c27b0 !important;
+}
+
+.tab-group[data-group-key="gray"] .tab-group-header {
+  border-left: 3px solid #757575 !important;
+}
+
+/* Group tabs container - Dark theme */
+.tab-group-tabs {
+  background: #1e1e1e !important;
+  border-color: #333333 !important;
+}
+
+/* Search container - Dark theme */
+.search-container {
+  background: #2a2a2a !important;
+  border-color: #404040 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.search-container:focus-within {
+  background: #252525 !important;
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 2px 8px rgba(109, 166, 255, 0.2) !important;
+}
+
+.search-container:hover {
+  background: #333333 !important;
+  border-color: #4a4a4a !important;
+}
+
+.search-icon {
+  color: #888888 !important;
+}
+
+.search-input {
+  color: #e0e0e0 !important;
+}
+
+.search-input::placeholder {
+  color: #888888 !important;
+}
+
+/* Search results - Dark theme */
+.heading-search-results {
+  border-color: #333333 !important;
+}
+
+.heading-search-results-header {
+  background: linear-gradient(135deg, #1a2a38 0%, #1e2a38 100%) !important;
+  border-color: #2a3a4a !important;
+}
+
+.heading-search-results-title {
+  color: #6da6ff !important;
+}
+
+/* Subcategory (category) - Dark theme */
+.heading-search-subcategory-header {
+  background: #2a2a2a !important;
+  border-color: #404040 !important;
+}
+
+.heading-search-subcategory-header:hover {
+  background: #333333 !important;
+}
+
+.heading-search-subcategory-title {
+  color: #888888 !important;
+}
+
+.heading-search-subcategory-count {
+  background: #2a2a2a !important;
+  color: #a0a0a0 !important;
+  box-shadow: none !important;
+}
+
+.heading-search-subcategory-toggle {
+  color: #888888 !important;
+}
+
+/* Search items - Dark theme */
+.heading-search-item {
+  background: #1e1e1e !important;
+  border-color: #333333 !important;
+}
+
+.heading-search-item:hover {
+  background: #252525 !important;
+  border-color: #404040 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}

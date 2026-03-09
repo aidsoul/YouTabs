@@ -1324,6 +1324,11 @@ class YouTabsCore {
           this.uiRenderer.options.settings = this.settings;
         }
         
+        // Check if theme changed
+        if (oldSettings.theme !== this.settings.theme) {
+          this.applyTheme(this.settings.theme);
+        }
+        
         // Update action buttons visibility if setting changed
         if (oldSettings.enableActionButtonsLeft !== this.settings.enableActionButtonsLeft) {
           this.updateActionButtonsVisibility();
@@ -1357,6 +1362,9 @@ class YouTabsCore {
     try {
       // Load settings from SettingsManager
       this.settings = await this.settingsManager.getAll();
+      
+      // Apply theme
+      await this.applyTheme(this.settings.theme);
       
       // Migrate from localStorage to IndexedDB if needed
       if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
@@ -2702,5 +2710,24 @@ class YouTabsCore {
   // Reset filter to default values - delegate to SearchEngine
   resetFilter() {
     this.searchEngine.resetFilter();
+  }
+  
+  // Apply theme to the page
+  async applyTheme(theme) {
+    // Default to light theme
+    const themeName = theme || 'light';
+    
+    // Remove existing theme link if present
+    const existingThemeLink = document.getElementById('theme-css');
+    if (existingThemeLink) {
+      existingThemeLink.remove();
+    }
+    
+    // Create and add new theme link
+    const themeLink = document.createElement('link');
+    themeLink.id = 'theme-css';
+    themeLink.rel = 'stylesheet';
+    themeLink.href = `css/${themeName}.css`;
+    document.head.appendChild(themeLink);
   }
 }

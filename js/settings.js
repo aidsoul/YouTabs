@@ -35,6 +35,9 @@ let isSearchActive = false;
 async function initSettings() {
   const settings = await loadSettings();
   
+  // Apply theme first
+  await applyTheme(settings.theme);
+  
   // Apply settings to toggles and selects
   Object.keys(settings).forEach(key => {
     const element = document.getElementById(key);
@@ -79,6 +82,11 @@ async function initSettings() {
       const setting = select.dataset.setting;
       const value = select.value;
       
+      // If theme setting, apply immediately
+      if (setting === 'theme') {
+        await applyTheme(value);
+      }
+      
       // Update settings
       const currentSettings = await loadSettings();
       currentSettings[setting] = value;
@@ -115,6 +123,22 @@ async function initSettings() {
   
   // Initialize reset button
   initResetButton();
+}
+
+// Apply theme to the page
+async function applyTheme(theme) {
+  // Remove existing theme link if present
+  const existingThemeLink = document.getElementById('theme-css');
+  if (existingThemeLink) {
+    existingThemeLink.remove();
+  }
+  
+  // Create and add new theme link
+  const themeLink = document.createElement('link');
+  themeLink.id = 'theme-css';
+  themeLink.rel = 'stylesheet';
+  themeLink.href = `css/${theme}.css`;
+  document.head.appendChild(themeLink);
 }
 
 // Initialize category navigation

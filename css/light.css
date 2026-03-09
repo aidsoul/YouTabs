@@ -1,0 +1,83 @@
+/* YouTabs Extension - Light Theme */
+/* This file contains light theme CSS variables */
+/* The base styles.css has light colors as default */
+
+:root {
+  /* Light theme color palette */
+  --bg-inactive: #f0f2f5;
+  --bg-active: #ffffff;
+  --bg-hover: #e8ebef;
+  --bg-dark-hover: #d8dde2;
+  --close-default: #8e9aab;
+  --close-hover: #ff5252;
+  --text-primary: #212326;
+  --text-secondary: #6b7c93;
+  --border-color: #dce1e6;
+  --scrollbar-color: #c4c9ce;
+  --accent-color: #3b74e7;
+  --shadow-light: rgba(0, 0, 0, 0.08);
+  --shadow-medium: rgba(0, 0, 0, 0.12);
+  --shadow-large: rgba(0, 0, 0, 0.18);
+  
+  /* Browser blue tones - Light theme */
+  --yb-blue: #3b74e7;
+  --yb-blue-light: #eaf1fe;
+  --yb-blue-hover: #2d5bb5;
+  --yb-green: #3bcf76;
+  --yb-orange: #ff9900;
+  --yb-red: #ff4f4f;
+  
+  /* Tree Style Tab colors - Light theme */
+  --tree-line-color: #d0d4da;
+  --tree-line-active: #ffcc00;
+}
+
+/* Additional light theme specific styles */
+body {
+  background: #ffffff;
+  color: var(--text-primary);
+}
+
+.you-tabs-container {
+  background: var(--bg-active);
+}
+
+.tabs-header {
+  background: var(--bg-active);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.settings-sidebar {
+  background: #f8f9fa;
+}
+
+/* Ensure proper text colors */
+.settings-search input {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.settings-section {
+  background: var(--bg-active);
+  border-color: var(--border-color);
+}
+
+/* Scrollbar styling for light theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-inactive);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--close-default);
+}
