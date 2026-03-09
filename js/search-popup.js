@@ -142,6 +142,10 @@ function renderSimpleTabs(tabsToRender) {
 
 // Render heading search results with categories and subcategories
 function renderHeadingSearchResults(tabsToRender, headings) {
+  // Get current search query for data attributes
+  const currentQuery = searchInput?.value.trim() || '';
+  const escapedQuery = escapeHtml(currentQuery);
+  
   // Group heading results by type
   const groupedResults = {};
   const typeLabels = {
@@ -307,7 +311,7 @@ function renderHeadingSearchResults(tabsToRender, headings) {
         `;
         
         html += `
-          <div class="heading-search-item" data-index="${globalIndex}" data-type="heading" data-url="${escapeHtml(pageUrl)}" data-tab-id="${tabId}" data-heading-id="${result.heading?.id || ''}" data-heading-type="${type}">
+          <div class="heading-search-item" data-index="${globalIndex}" data-type="heading" data-url="${escapeHtml(pageUrl)}" data-tab-id="${tabId}" data-heading-id="${result.heading?.id || ''}" data-heading-type="${type}" data-search-query="${escapedQuery}">
             ${itemContent}
             ${parentTitle ? `<div class="heading-tab-info"><span class="heading-tab-title">${escapeHtml(parentTitle)}</span></div>` : ''}
           </div>
@@ -350,6 +354,7 @@ function renderHeadingSearchResults(tabsToRender, headings) {
   });
 
   // Add click handlers for heading items
+  const currentSearchQuery = searchInput?.value.trim() || '';
   tabsList.querySelectorAll('.heading-search-item').forEach(item => {
     item.addEventListener('click', async () => {
       const url = item.dataset.url;
@@ -357,7 +362,9 @@ function renderHeadingSearchResults(tabsToRender, headings) {
       const headingId = item.dataset.headingId;
       const headingType = item.dataset.headingType;
       
-      const searchQuery = searchInput?.value.trim() || '';
+      // Get search query from data attribute (set at render time) or current input value
+      // Note: browser automatically decodes HTML entities in data attributes
+      const searchQuery = item.dataset.searchQuery || currentSearchQuery || searchInput?.value.trim() || '';
       
       try {
         if (tabId) {

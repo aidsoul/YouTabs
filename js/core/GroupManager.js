@@ -389,6 +389,18 @@ class GroupManager {
     if (group) {
       const oldColor = group.color;
       group.color = newColor;
+
+      // Also update all subgroups to inherit the new color
+      const updateSubgroups = (parentId) => {
+        const children = this.customGroups.filter(g => g.parentId === parentId);
+        for (const child of children) {
+          child.color = newColor;
+          // Recursively update this child's subgroups
+          updateSubgroups(child.id);
+        }
+      };
+      updateSubgroups(groupId);
+
       await this.saveCustomGroups();
       this._emit('groupUpdated', { group, changes: { color: { old: oldColor, new: newColor } } });
       return true;
