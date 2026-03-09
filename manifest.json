@@ -71,7 +71,7 @@
   "commands": {
     "toggle-search": {
       "suggested_key": {
-        "default": "F2"
+        "default": "Alt+F"
       },
       "description": "Open indexed search popup"
     }
