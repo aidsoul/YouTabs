@@ -446,8 +446,20 @@ function calculateRelevance(query, keywords, label, description) {
 function highlightText(text, query) {
   if (!query || !text) return text;
   
+  // Local fallback escapeHtml function
+  const localEscapeHtml = (txt) => {
+    if (!txt) return '';
+    const div = document.createElement('div');
+    div.textContent = txt;
+    return div.innerHTML;
+  };
+  
+  // First escape HTML to prevent XSS
+  const escapeHtml = window.DOMUtils ? window.DOMUtils.escapeHtml : localEscapeHtml;
+  const escapedText = escapeHtml(text);
+  
   const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
-  return text.replace(regex, '<mark style="background: rgba(73, 230, 11, 0.25); padding: 0 2px; border-radius: 2px;">$1</mark>');
+  return escapedText.replace(regex, '<mark style="background: rgba(73, 230, 11, 0.25); padding: 0 2px; border-radius: 2px;">$1</mark>');
 }
 
 // Escape regex special characters

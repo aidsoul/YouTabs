@@ -1,5 +1,6 @@
 // YouTabs Search Popup Script
 // Uses SearchEngine for searching tabs and indexed data
+// Note: DOMUtils is available via window.DOMUtils
 
 // State
 let tabs = [];
@@ -12,14 +13,6 @@ let searchEngine = null;
 const searchInput = document.getElementById('searchPopupInput');
 const tabsList = document.getElementById('tabsList');
 const tabCountEl = document.getElementById('tabCount');
-
-// Escape HTML helper
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 // Initialize
 async function init() {

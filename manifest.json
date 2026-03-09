@@ -48,7 +48,7 @@
     }
   ],
   "background": {
-    "scripts": ["js/utils/search-utils.js", "js/db.js", "js/settings-manager.js", "js/core/SearchEngine.js", "js/background.js"]
+    "scripts": ["js/utils/search-utils.js", "js/db.js", "js/settings-manager.js", "js/settings.js", "js/core/SearchEngine.js", "js/background.js"]
   },
   "web_accessible_resources": [
     {
