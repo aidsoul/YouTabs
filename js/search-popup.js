@@ -8,6 +8,7 @@ let filteredTabs = [];
 let headingSearchResults = [];
 let selectedIndex = -1;
 let searchEngine = null;
+let settings = null;
 
 // Get elements
 const searchInput = document.getElementById('searchPopupInput');
@@ -19,7 +20,7 @@ async function init() {
   try {
     // Get settings
     const settingsManager = new SettingsManager();
-    const settings = await settingsManager.getAll();
+    settings = await settingsManager.getAll();
 
     // Load tabs
     tabs = await browser.tabs.query({});
@@ -114,7 +115,7 @@ function renderSimpleTabs(tabsToRender) {
       <div class="tab-item" data-index="${index}" data-type="tab" data-url="${escapeHtml(tab.url)}" data-tab-id="${tab.id}">
         ${favicon}
         <div class="tab-info">
-          <div class="tab-title">${escapeHtml(tab.title || 'Untitled')}</div>
+          ${settings?.showTabTitle !== false ? `<div class="tab-title">${escapeHtml(tab.title || 'Untitled')}</div>` : ''}
           <div class="tab-url">${escapeHtml(tab.url)}</div>
         </div>
       </div>
@@ -221,7 +222,7 @@ function renderHeadingSearchResults(tabsToRender, headings) {
         <div class="tab-item" data-index="${index}" data-type="tab" data-url="${escapeHtml(tab.url)}" data-tab-id="${tab.id}">
           ${favicon}
           <div class="tab-info">
-            <div class="tab-title">${escapeHtml(tab.title || 'Untitled')}</div>
+            ${settings?.showTabTitle !== false ? `<div class="tab-title">${escapeHtml(tab.title || 'Untitled')}</div>` : ''}
             <div class="tab-url">${escapeHtml(tab.url)}</div>
           </div>
         </div>

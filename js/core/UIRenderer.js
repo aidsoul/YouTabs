@@ -2312,7 +2312,7 @@ class UIRenderer {
         ${faviconHtml}
       </div>
       <div class="tab-content">
-        <span class="tab-title" title="${this.escapeHtml(title)}">${this.escapeHtml(title)}</span>
+        ${this.options.settings.showTabTitle !== false ? `<span class="tab-title" title="${this.escapeHtml(title)}">${this.escapeHtml(title)}</span>` : ''}
         ${groupNameHtml}
       </div>
       ${indexedIndicator}

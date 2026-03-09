@@ -51,7 +51,7 @@
 
 body {
   font-family: var(--font-family);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.4;
   letter-spacing: 0.1px;
   background: #ffffff;
@@ -74,9 +74,9 @@ body.full-height {
   flex-direction: column;
   height: 100vh;
   width: 100%;
-  min-width: 280px;
+  min-width: 200px;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: visible;
   box-sizing: border-box;
   background: var(--bg-active);
   flex: 1 1 auto;
@@ -111,7 +111,7 @@ body {
 }
 
 .tabs-title {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -534,7 +534,7 @@ body {
   overflow-x: visible;
   overflow-y: auto;
   scroll-behavior: smooth;
-  padding: 4px 8px;
+  padding: 4px 2px;
   box-sizing: border-box;
   min-height: 0;
   width: 100%;
@@ -569,7 +569,7 @@ body {
   flex-direction: column;
   gap: 4px;
   min-height: 32px;
-  padding-bottom: 12px;
+  padding: 0;
   width: 100%;
   box-sizing: border-box;
 }
@@ -577,17 +577,17 @@ body {
 /* Responsive adjustments */
 @media (min-width: 400px) {
   .you-tabs-container {
-    min-width: 300px;
+    min-width: 220px;
   }
 }
 
 @media (min-width: 600px) {
   .you-tabs-container {
-    min-width: 350px;
+    min-width: 250px;
   }
   
   .tabs-scroll-container {
-    padding: 6px 10px;
+    padding: 6px 2px;
   }
 
   .tab-item {
@@ -622,7 +622,7 @@ body {
 /* Small screens (mobile landscape) */
 @media (min-width: 321px) and (max-width: 480px) {
   .you-tabs-container {
-    min-width: 280px;
+    min-width: 200px;
   }
   
   .tabs-header {
@@ -638,7 +638,7 @@ body {
 /* Medium screens (tablet) */
 @media (min-width: 481px) and (max-width: 768px) {
   .you-tabs-container {
-    min-width: 320px;
+    min-width: 240px;
   }
   
   .tabs-header {
@@ -666,12 +666,12 @@ body.full-height .tab-item:hover {
 .tab-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 36px;
-  padding: 0 12px 0 8px;
+  height: 28px;
+  padding: 0 4px;
   background: transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -680,7 +680,7 @@ body.full-height .tab-item:hover {
   flex-shrink: 0;
   box-sizing: border-box;
   border: 0.5px solid var(--border-color, #e0e0e0);
-  margin: 2px 4px;
+  margin: 1px 0;
 }
 
 .tab-item:hover {
@@ -1232,7 +1232,7 @@ body.full-height .tab-item:hover {
 }
 
 .tabs-empty-text {
-  font-size: 14px;
+  font-size: 12px;
 }
 
 /* Tab groups */

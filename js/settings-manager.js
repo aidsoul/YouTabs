@@ -11,6 +11,7 @@ class SettingsManager {
     
     // Display settings
     showFavicon: true,
+    showTabTitle: true,
     showAudio: true,
     closeOnSelect: true,
     enablePageSearch: true,
