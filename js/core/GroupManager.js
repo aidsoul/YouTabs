@@ -86,6 +86,19 @@ class GroupManager {
      * @private
      */
     this._saveMetadataTimeout = null;
+    
+    /**
+     * Batched save queue for IndexedDB operations
+     * @type {{groups: Object[], metadata: Object, scheduled: boolean, timeoutId: number|null}}
+     * @private
+     */
+    this._batchQueue = {
+      groups: null,
+      metadata: null,
+      scheduled: false,
+      timeoutId: null
+    };
+    this._batchDelay = 500; // Batch multiple operations for 500ms
   }
 
   // ==================== Event System ====================
@@ -209,64 +222,98 @@ class GroupManager {
   }
 
   /**
-   * Save custom groups to storage
+   * Save custom groups to storage (batched)
    * @returns {Promise<boolean>} Success status
    */
   async saveCustomGroups() {
+    // Queue the save - will be batched with other operations
+    this._batchQueue.groups = JSON.parse(JSON.stringify(this.customGroups));
+    this._scheduleBatchSave();
+    
+    // Clear depth cache since group structure may have changed
+    this.clearGroupDepthCache();
+    
+    // Rebuild groups lookup Map
+    this._rebuildGroupsMap();
+    
+    return true;
+  }
+  
+  /**
+   * Schedule a batched save to IndexedDB
+   * @private
+   */
+  _scheduleBatchSave() {
+    if (this._batchQueue.scheduled) return;
+    
+    this._batchQueue.scheduled = true;
+    
+    this._batchQueue.timeoutId = setTimeout(async () => {
+      await this._flushBatchSave();
+      this._batchQueue.scheduled = false;
+      this._batchQueue.timeoutId = null;
+    }, this._batchDelay);
+  }
+  
+  /**
+   * Flush the batched save queue to IndexedDB
+   * @private
+   */
+  async _flushBatchSave() {
     try {
-      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
-        await window.YouTabsDB.saveCustomGroups(this.customGroups);
-      } else {
-        // Fallback to localStorage if IndexedDB is not available
-        await browser.storage.local.set({
-          customGroups: this.customGroups
-        });
+      const hasGroups = this._batchQueue.groups !== null;
+      const hasMetadata = this._batchQueue.metadata !== null;
+      
+      if (!hasGroups && !hasMetadata) return;
+      
+      // Save groups if changed
+      if (hasGroups && window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        await window.YouTabsDB.saveCustomGroups(this._batchQueue.groups);
+      } else if (hasGroups) {
+        await browser.storage.local.set({ customGroups: this._batchQueue.groups });
       }
       
-      // Clear depth cache since group structure may have changed
-      this.clearGroupDepthCache();
+      // Save metadata if changed
+      if (hasMetadata && window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        await window.YouTabsDB.saveGroupTabMetadata(this._batchQueue.metadata);
+      } else if (hasMetadata) {
+        await browser.storage.local.set({ groupTabMetadata: this._batchQueue.metadata });
+      }
       
-      // Rebuild groups lookup Map
-      this._rebuildGroupsMap();
+      // Clear queue
+      this._batchQueue.groups = null;
+      this._batchQueue.metadata = null;
       
-      return true;
     } catch (error) {
-      console.error('GroupManager: Error saving custom groups:', error);
-      this._emit('error', { action: 'saveCustomGroups', error });
-      return false;
+      console.error('GroupManager: Error in batch save:', error);
+      this._emit('error', { action: 'batchSave', error });
     }
+  }
+  
+  /**
+   * Force immediate save (bypasses batching)
+   * @returns {Promise<boolean>} Success status
+   */
+  async forceSave() {
+    if (this._batchQueue.timeoutId) {
+      clearTimeout(this._batchQueue.timeoutId);
+      this._batchQueue.timeoutId = null;
+    }
+    this._batchQueue.groups = JSON.parse(JSON.stringify(this.customGroups));
+    this._batchQueue.metadata = this.groupTabMetadata;
+    await this._flushBatchSave();
+    return true;
   }
 
   /**
-   * Save group tab metadata to storage (debounced)
+   * Save group tab metadata to storage (batched)
    * @returns {Promise<boolean>} Success status
    */
   async saveGroupTabMetadata() {
-    return new Promise((resolve) => {
-      if (this._saveMetadataTimeout) {
-        clearTimeout(this._saveMetadataTimeout);
-      }
-      
-      this._saveMetadataTimeout = setTimeout(async () => {
-        try {
-          if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
-            await window.YouTabsDB.saveGroupTabMetadata(this.groupTabMetadata);
-          } else {
-            // Fallback to localStorage if IndexedDB is not available
-            await browser.storage.local.set({
-              groupTabMetadata: this.groupTabMetadata
-            });
-          }
-          this._saveMetadataTimeout = null;
-          resolve(true);
-        } catch (error) {
-          console.error('GroupManager: Error saving group tab metadata:', error);
-          this._emit('error', { action: 'saveGroupTabMetadata', error });
-          this._saveMetadataTimeout = null;
-          resolve(false);
-        }
-      }, 1000); // Debounce for 1 second
-    });
+    // Queue the save - will be batched with other operations
+    this._batchQueue.metadata = JSON.parse(JSON.stringify(this.groupTabMetadata));
+    this._scheduleBatchSave();
+    return true;
   }
 
   // ==================== Group CRUD Operations ====================
@@ -1245,6 +1292,15 @@ class GroupManager {
       clearTimeout(this._saveMetadataTimeout);
       this._saveMetadataTimeout = null;
     }
+    
+    // Clear batch queue
+    if (this._batchQueue.timeoutId) {
+      clearTimeout(this._batchQueue.timeoutId);
+      this._batchQueue.timeoutId = null;
+    }
+    this._batchQueue.scheduled = false;
+    this._batchQueue.groups = null;
+    this._batchQueue.metadata = null;
     
     // Clear state
     this.customGroups = [];

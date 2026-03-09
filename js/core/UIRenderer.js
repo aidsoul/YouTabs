@@ -124,6 +124,23 @@ class UIRenderer {
     this._colorPickerCloseHandler = null;
     this._loadedGroups = new Set();
     
+    // ==================== Virtual Scrolling ====================
+    
+    this._virtualScrollEnabled = true;
+    this._virtualScrollState = {
+      itemHeight: 36, // Default estimated height, will be measured
+      bufferSize: 5,  // Extra items to render above/below viewport
+      visibleStartIndex: 0,
+      visibleEndIndex: 0,
+      totalItems: 0,
+      scrollTop: 0,
+      containerHeight: 0,
+      measured: false
+    };
+    this._scrollRafId = null;
+    this._renderRafId = null;
+    this._tabElementsCache = new Map(); // Cache for tab elements by tabId
+    
     // ==================== Shared DOMParser ====================
     
     this._domParser = new DOMParser();
@@ -182,6 +199,11 @@ class UIRenderer {
     this.isValidFaviconUrl = this.isValidFaviconUrl.bind(this);
     this.formatUrl = this.formatUrl.bind(this);
     this.getGroupInfo = this.getGroupInfo.bind(this);
+    
+    // Virtual scrolling methods
+    this._onScroll = this._onScroll.bind(this);
+    this._updateVirtualScroll = this._updateVirtualScroll.bind(this);
+    this._measureItemHeight = this._measureItemHeight.bind(this);
   }
   
   // ==================== DOM Element Setup ====================
@@ -199,6 +221,15 @@ class UIRenderer {
     this.tabCount = elements.tabCount || null;
     this.tabsScrollContainer = elements.tabsScrollContainer || null;
     this.tabPreview = elements.tabPreview || null;
+    
+    // Setup scroll listener for virtual scrolling
+    if (this.tabsScrollContainer && this._virtualScrollEnabled) {
+      this.tabsScrollContainer.removeEventListener('scroll', this._onScroll);
+      this.tabsScrollContainer.addEventListener('scroll', this._onScroll, { passive: true });
+      
+      // Measure container height
+      this._virtualScrollState.containerHeight = this.tabsScrollContainer.clientHeight || 400;
+    }
   }
   
   // ==================== Modal Methods ====================
@@ -1378,15 +1409,16 @@ class UIRenderer {
   renderTabs() {
     if (!this.tabsList) return;
     
-    // Debounce rapid render calls to prevent flickering
-    if (this._renderDebounceTimer) {
-      clearTimeout(this._renderDebounceTimer);
+    // Cancel any pending RAF render
+    if (this._renderRafId) {
+      cancelAnimationFrame(this._renderRafId);
     }
     
-    this._renderDebounceTimer = setTimeout(() => {
-      this._renderDebounceTimer = null;
+    // Use requestAnimationFrame for rendering - syncs with browser paint cycle
+    this._renderRafId = requestAnimationFrame(() => {
+      this._renderRafId = null;
       this._doRenderTabs();
-    }, 50);
+    });
   }
   
   /**
@@ -2076,6 +2108,76 @@ class UIRenderer {
     
     // Single DOM operation to append all content
     this.tabsList.appendChild(fragment);
+    
+    // Measure item height after first render for virtual scrolling
+    if (!this._virtualScrollState.measured) {
+      this._measureItemHeight();
+    }
+  }
+  
+  // ==================== Virtual Scrolling Methods ====================
+  
+  /**
+   * Handle scroll event with requestAnimationFrame throttling
+   * @param {Event} e - Scroll event
+   */
+  _onScroll(e) {
+    if (this._scrollRafId) return;
+    
+    this._scrollRafId = requestAnimationFrame(() => {
+      this._scrollRafId = null;
+      this._updateVirtualScroll();
+    });
+  }
+  
+  /**
+   * Update visible items based on scroll position
+   */
+  _updateVirtualScroll() {
+    if (!this.tabsScrollContainer || !this._virtualScrollEnabled) return;
+    
+    const state = this._virtualScrollState;
+    const scrollTop = this.tabsScrollContainer.scrollTop;
+    const containerHeight = this.tabsScrollContainer.clientHeight || state.containerHeight;
+    
+    state.scrollTop = scrollTop;
+    state.containerHeight = containerHeight;
+    
+    // Calculate visible range
+    const visibleStart = Math.floor(scrollTop / state.itemHeight);
+    const visibleEnd = Math.ceil((scrollTop + containerHeight) / state.itemHeight);
+    
+    // Add buffer
+    const buffer = state.bufferSize;
+    state.visibleStartIndex = Math.max(0, visibleStart - buffer);
+    state.visibleEndIndex = visibleEnd + buffer;
+    
+    // Re-render only if visible range changed significantly
+    // Note: This is a simplified version - full implementation would reuse DOM elements
+  }
+  
+  /**
+   * Measure item height from existing DOM elements
+   */
+  _measureItemHeight() {
+    if (!this.tabsList) return;
+    
+    const firstTab = this.tabsList.querySelector('.tab-item');
+    if (firstTab) {
+      const height = firstTab.getBoundingClientRect().height;
+      if (height > 0) {
+        this._virtualScrollState.itemHeight = height;
+        this._virtualScrollState.measured = true;
+      }
+    }
+  }
+  
+  /**
+   * Enable or disable virtual scrolling
+   * @param {boolean} enabled - Whether to enable virtual scrolling
+   */
+  setVirtualScrollEnabled(enabled) {
+    this._virtualScrollEnabled = enabled;
   }
   
   /**

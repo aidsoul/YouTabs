@@ -59,6 +59,11 @@ class SearchEngine {
     // Debounced search
     this._debouncedPerformSearch = this._debounce((query) => this._performSearch(query), 150);
     
+    // Search result cache
+    this._searchCache = new Map();
+    this._cacheMaxSize = 50;
+    this._cacheVersion = 0; // Increment to invalidate cache when tabs change
+    
     // Initialize worker
     this._initWorker();
   }
@@ -255,6 +260,14 @@ class SearchEngine {
   }
   
   /**
+   * Invalidate search cache (call when tabs change)
+   */
+  invalidateCache() {
+    this._cacheVersion++;
+    this._searchCache.clear();
+  }
+  
+  /**
    * Get tabs to display based on search state
    * @returns {Array} Tabs to display
    */
@@ -276,9 +289,28 @@ class SearchEngine {
     this.searchQuery = lowerQuery;
     
     const tabs = this.options.getTabs();
+    const tabsVersion = this._cacheVersion;
     
-    // Apply filter - only filter tabs if filterTabs is enabled
-    this.filteredTabs = (lowerQuery && this.filterTabs) ? this._filterTabsList(tabs, lowerQuery) : [];
+    // Check cache first
+    if (lowerQuery && this.filterTabs) {
+      const cacheKey = `${lowerQuery}:${tabs.length}:${tabsVersion}`;
+      const cached = this._searchCache.get(cacheKey);
+      if (cached) {
+        this.filteredTabs = cached;
+      } else {
+        // Apply filter
+        this.filteredTabs = this._filterTabsList(tabs, lowerQuery);
+        
+        // Add to cache
+        if (this._searchCache.size >= this._cacheMaxSize) {
+          const firstKey = this._searchCache.keys().next().value;
+          this._searchCache.delete(firstKey);
+        }
+        this._searchCache.set(cacheKey, this.filteredTabs);
+      }
+    } else {
+      this.filteredTabs = [];
+    }
     
     // Also search page headings if enabled and has heading types selected
     this.headingSearchResults = [];
@@ -298,6 +330,14 @@ class SearchEngine {
         headingResults: this.headingSearchResults
       });
     }
+  }
+  
+  /**
+   * Invalidate search cache (call when tabs change)
+   */
+  invalidateCache() {
+    this._cacheVersion++;
+    this._searchCache.clear();
   }
   
   _filterTabsList(tabs, query) {
