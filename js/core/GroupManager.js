@@ -16,6 +16,7 @@ class GroupManager {
    * @param {Function} options.onTabAddedToGroup - Callback when a tab is added to a group
    * @param {Function} options.onTabRemovedFromGroup - Callback when a tab is removed from a group
    * @param {Function} options.onError - Callback for errors
+   * @param {StateManager} options.stateManager - Optional StateManager instance for centralized state
    */
   constructor(options = {}) {
     this.options = {
@@ -99,6 +100,10 @@ class GroupManager {
       timeoutId: null
     };
     this._batchDelay = 500; // Batch multiple operations for 500ms
+    
+    // StateManager integration
+    this.stateManager = options.stateManager || null;
+    this._syncWithStateManager = options.syncWithStateManager !== false;
   }
 
   // ==================== Event System ====================
@@ -155,6 +160,49 @@ class GroupManager {
       } catch (error) {
         console.error(`Error in GroupManager ${callbackName} callback:`, error);
       }
+    }
+    
+    // Sync with StateManager if enabled
+    if (this._syncWithStateManager && this.stateManager) {
+      this._syncState(event, data);
+    }
+  }
+  
+  /**
+   * Sync state changes with StateManager
+   * @private
+   */
+  _syncState(event, data) {
+    switch (event) {
+      case 'groupsLoaded':
+        this.stateManager.setGroups(data.groups, data.metadata);
+        break;
+      case 'groupCreated':
+        this.stateManager.addGroup(data.group);
+        break;
+      case 'groupDeleted':
+        this.stateManager.removeGroup(data.groupId);
+        break;
+      case 'groupUpdated':
+        if (data.group) {
+          this.stateManager.updateGroup(data.group.id, data.changes);
+        }
+        break;
+    }
+  }
+  
+  /**
+   * Set StateManager instance
+   * @param {StateManager} manager - StateManager instance
+   * @param {boolean} sync - Whether to sync state changes
+   */
+  setStateManager(manager, sync = true) {
+    this.stateManager = manager;
+    this._syncWithStateManager = sync;
+    
+    // Sync current state immediately
+    if (sync && manager) {
+      this.stateManager.setGroups(this.customGroups, this.groupTabMetadata);
     }
   }
 

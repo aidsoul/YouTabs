@@ -15,6 +15,7 @@ class TabManager {
    * @param {Function} options.onTabClosed - Callback when a tab is closed
    * @param {Function} options.onTabCreated - Callback when a tab is created
    * @param {Function} options.onError - Callback for errors
+   * @param {StateManager} options.stateManager - Optional StateManager instance for centralized state
    */
   constructor(options = {}) {
     this.options = {
@@ -25,6 +26,10 @@ class TabManager {
     // State
     this.tabs = [];
     this.activeTabId = null;
+    
+    // StateManager integration
+    this.stateManager = options.stateManager || null;
+    this._syncWithStateManager = options.syncWithStateManager !== false;
     
     // Event listeners storage
     this._listeners = new Map();
@@ -73,6 +78,57 @@ class TabManager {
         console.error(`Error in TabManager ${event} handler:`, error);
       }
     });
+    
+    // Sync with StateManager if enabled
+    if (this._syncWithStateManager && this.stateManager) {
+      this._syncState(event, data);
+    }
+  }
+  
+  /**
+   * Sync state changes with StateManager
+   * @private
+   */
+  _syncState(event, data) {
+    switch (event) {
+      case 'tabsLoaded':
+        this.stateManager.setTabs(data.tabs, data.activeTabId);
+        break;
+      case 'tabActivated':
+        this.stateManager.setActiveTab(data.tabId);
+        break;
+      case 'tabCreated':
+        this.stateManager.addTab(data.tab);
+        break;
+      case 'tabClosed':
+        this.stateManager.removeTab(data.tabId);
+        break;
+      case 'tabUpdated':
+        if (data.tab) {
+          this.stateManager.updateTab(data.tab.id, data.tab);
+        }
+        break;
+      case 'tabsClosed':
+        if (data.tabIds) {
+          data.tabIds.forEach(tabId => this.stateManager.removeTab(tabId));
+        }
+        break;
+    }
+  }
+  
+  /**
+   * Set StateManager instance
+   * @param {StateManager} manager - StateManager instance
+   * @param {boolean} sync - Whether to sync state changes
+   */
+  setStateManager(manager, sync = true) {
+    this.stateManager = manager;
+    this._syncWithStateManager = sync;
+    
+    // Sync current state immediately
+    if (sync && manager) {
+      this.stateManager.setTabs(this.tabs, this.activeTabId);
+    }
   }
 
   // ==================== Tab Loading & Queries ====================

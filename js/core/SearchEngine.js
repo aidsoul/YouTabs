@@ -18,6 +18,7 @@ class SearchEngine {
    * @param {Function} options.getGroupHierarchyNames - Callback to get group hierarchy for a tab
    * @param {Function} options.onSearchResults - Callback when search results change
    * @param {Function} options.onError - Callback for errors
+   * @param {StateManager} options.stateManager - Optional StateManager instance for centralized state
    */
   constructor(options = {}) {
     this.options = {
@@ -63,6 +64,10 @@ class SearchEngine {
     this._searchCache = new Map();
     this._cacheMaxSize = 50;
     this._cacheVersion = 0; // Increment to invalidate cache when tabs change
+    
+    // StateManager integration
+    this.stateManager = options.stateManager || null;
+    this._syncWithStateManager = options.syncWithStateManager !== false;
     
     // Initialize worker
     this._initWorker();
@@ -200,6 +205,25 @@ class SearchEngine {
     }
   }
   
+  /**
+   * Set StateManager instance
+   * @param {StateManager} manager - StateManager instance
+   * @param {boolean} sync - Whether to sync state changes
+   */
+  setStateManager(manager, sync = true) {
+    this.stateManager = manager;
+    this._syncWithStateManager = sync;
+    
+    // Sync current state immediately
+    if (sync && manager) {
+      this.stateManager.setSearchState({
+        query: this.searchQuery,
+        filteredTabs: this.filteredTabs,
+        headingResults: this.headingSearchResults
+      });
+    }
+  }
+  
   // ==================== Public Search API ====================
   
   /**
@@ -256,6 +280,11 @@ class SearchEngine {
         filteredTabs: [],
         headingResults: []
       });
+    }
+    
+    // Sync with StateManager if enabled
+    if (this._syncWithStateManager && this.stateManager) {
+      this.stateManager.clearSearch();
     }
   }
   
@@ -325,6 +354,15 @@ class SearchEngine {
     // Notify listener
     if (this.options.onSearchResults) {
       this.options.onSearchResults({
+        query: lowerQuery,
+        filteredTabs: this.filteredTabs,
+        headingResults: this.headingSearchResults
+      });
+    }
+    
+    // Sync with StateManager if enabled
+    if (this._syncWithStateManager && this.stateManager) {
+      this.stateManager.setSearchState({
         query: lowerQuery,
         filteredTabs: this.filteredTabs,
         headingResults: this.headingSearchResults
