@@ -887,3 +887,155 @@ browser.omnibox.onInputEntered.addListener(async (content, disposition) => {
     console.error('Invalid URL from omnibox:', url, e);
   }
 });
+
+// ============================================
+// Auto-Discard Inactive Tabs Functionality
+// ============================================
+
+// Track last active time for each tab
+const tabLastActiveTime = new Map();
+
+// Timer for auto-discard
+let autoDiscardTimer = null;
+
+/**
+ * Load auto-discard settings
+ */
+async function loadAutoDiscardSettings() {
+  try {
+    const stored = await browser.storage.local.get('settings');
+    const settings = stored.settings || {};
+    return {
+      enabled: settings.autoDiscardEnabled || false,
+      minutes: settings.autoDiscardMinutes || 5
+    };
+  } catch (error) {
+    console.error('Error loading auto-discard settings:', error);
+    return { enabled: false, minutes: 5 };
+  }
+}
+
+/**
+ * Discard inactive tabs that haven't been active for longer than the specified time
+ * Unloads inactive tabs from memory when they exceed the inactivity threshold
+ */
+async function discardInactiveTabs() {
+  try {
+    const { enabled, minutes } = await loadAutoDiscardSettings();
+    
+    if (!enabled || minutes <= 0) {
+      return;
+    }
+    
+    const now = Date.now();
+    const inactiveThresholdMs = minutes * 60 * 1000;
+    
+    // Get all tabs from all windows
+    const tabs = await browser.tabs.query({});
+    
+    let discardedCount = 0;
+    
+    for (const tab of tabs) {
+      // Skip active tab - keep it in memory
+      if (tab.active) {
+        tabLastActiveTime.set(tab.id, now);
+        continue;
+      }
+      
+      // Skip already discarded tabs
+      if (tab.discarded) {
+        continue;
+      }
+      
+      // Skip pinned tabs
+      if (tab.pinned) {
+        continue;
+      }
+      
+      // Check if tab has been inactive for longer than the threshold
+      const lastActive = tabLastActiveTime.get(tab.id) || now;
+      const inactiveDuration = now - lastActive;
+      
+      if (inactiveDuration >= inactiveThresholdMs) {
+        try {
+          await browser.tabs.discard(tab.id);
+          discardedCount++;
+          console.log(`YouTabs: Automatically discarded tab ${tab.id} (${tab.title}) - inactive for ${Math.round(inactiveDuration / 60000)} minutes`);
+        } catch (error) {
+          // Some tabs cannot be discarded (e.g., active tab, certain special tabs)
+          console.warn(`YouTabs: Could not discard tab ${tab.id}:`, error.message);
+        }
+      }
+    }
+    
+    // Log discarded tabs (silent operation - no notification)
+    if (discardedCount > 0) {
+      console.log(`YouTabs: Discarded ${discardedCount} tab(s) from memory`);
+    }
+  } catch (error) {
+    console.error('YouTabs: Error in discardInactiveTabs:', error);
+  }
+}
+
+/**
+ * Update the auto-discard timer based on settings
+ */
+async function updateAutoDiscardTimer() {
+  // Clear existing timer
+  if (autoDiscardTimer) {
+    clearInterval(autoDiscardTimer);
+    autoDiscardTimer = null;
+  }
+  
+  const { enabled, minutes } = await loadAutoDiscardSettings();
+  
+  if (enabled && minutes > 0) {
+    // Check every minute to be responsive, but only discard tabs that exceed threshold
+    autoDiscardTimer = setInterval(discardInactiveTabs, 60000);
+    console.log(`YouTabs: Auto-discard enabled - checking every minute (threshold: ${minutes} minute(s))`);
+    
+    // Also run immediately
+    discardInactiveTabs();
+  } else {
+    console.log('YouTabs: Auto-discard disabled');
+  }
+}
+
+/**
+ * Handle tab activation - update last active time
+ */
+browser.tabs.onActivated.addListener(async (activeInfo) => {
+  tabLastActiveTime.set(activeInfo.tabId, Date.now());
+});
+
+/**
+ * Handle tab updates - update last active time when tab is accessed
+ */
+browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' || changeInfo.title) {
+    tabLastActiveTime.set(tabId, Date.now());
+  }
+});
+
+/**
+ * Handle tab removal - clean up tracking
+ */
+browser.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  tabLastActiveTime.delete(tabId);
+});
+
+// Listen for storage changes to update timer
+browser.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.settings) {
+    const newSettings = changes.settings.newValue;
+    if (newSettings && (
+      typeof newSettings.autoDiscardEnabled !== 'undefined' ||
+      typeof newSettings.autoDiscardMinutes !== 'undefined'
+    )) {
+      updateAutoDiscardTimer();
+    }
+  }
+});
+
+// Initialize auto-discard on startup
+updateAutoDiscardTimer();

@@ -66,6 +66,9 @@ class SettingsManager {
     indexThrottleMs: 1000,
     maxIndexedPages: 1000,
     lazyLoadGroups: false,
+    // Auto-discard settings (default: 5 minutes)
+    autoDiscardEnabled: false,
+    autoDiscardMinutes: 5,
     // Grouping settings
     enableGrouping: true,
     groupingType: 'custom',
