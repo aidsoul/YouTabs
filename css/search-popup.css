@@ -86,7 +86,8 @@ body {
 }
 
 /* Regex Search Button */
-.search-regex-btn {
+.search-regex-btn,
+.search-clear-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,7 +99,22 @@ body {
   cursor: pointer;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: all 100ms ease;
+  transition: all 0.15s ease;
+}
+
+.search-clear-btn {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.search-clear-btn.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.search-clear-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .search-regex-btn:hover {

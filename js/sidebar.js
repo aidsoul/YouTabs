@@ -85,10 +85,10 @@ class YouTabsSidebar extends YouTabsCore {
         const query = e.target.value.trim();
         
         if (!query) {
-          // Show history when input is empty
-          this.loadSearchHistory().then(() => {
-            this.renderSearchHistory();
-          });
+          // Show tabs when input becomes empty (not history)
+          this.isShowingHistory = false;
+          this.clearSearch();
+          this.renderTabsList();
         } else {
           // Hide history and search
           this.isShowingHistory = false;
@@ -105,6 +105,18 @@ class YouTabsSidebar extends YouTabsCore {
             this.renderSearchHistory();
           });
         }
+      });
+      
+      // Show tabs when input loses focus
+      this.searchInput.addEventListener('blur', () => {
+        // Small delay to allow button clicks to register first
+        setTimeout(() => {
+          const query = this.searchInput?.value.trim();
+          if (!query) {
+            this.isShowingHistory = false;
+            this.renderTabsList();
+          }
+        }, 150);
       });
       
       this.searchInput.addEventListener('keydown', (e) => {

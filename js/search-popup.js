@@ -17,6 +17,7 @@ const searchInput = document.getElementById('searchPopupInput');
 const tabsList = document.getElementById('tabsList');
 const tabCountEl = document.getElementById('tabCount');
 const searchRegexBtn = document.getElementById('searchRegexBtn');
+const searchClearBtn = document.getElementById('searchClearBtn');
 
 // Initialize
 async function init() {
@@ -50,6 +51,66 @@ async function init() {
         if (searchInput && searchInput.value) {
           searchEngine.setSearchQuery(searchInput.value);
         }
+      });
+    }
+
+    // Setup clear button
+    if (searchClearBtn && searchInput) {
+      // Show/hide clear button based on input content
+      const updateClearButtonVisibility = () => {
+        if (searchInput.value.length > 0) {
+          searchClearBtn.classList.add('visible');
+        } else {
+          searchClearBtn.classList.remove('visible');
+        }
+      };
+      
+      // Initial state
+      updateClearButtonVisibility();
+      
+      // Update on input change
+      searchInput.addEventListener('input', updateClearButtonVisibility);
+      
+      // Clear input on button click
+      searchClearBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        searchInput.focus();
+        updateClearButtonVisibility();
+        
+        // Trigger search with empty query
+        if (searchEngine) {
+          searchEngine.setSearchQuery('');
+        }
+        
+        // Show history
+        isShowingHistory = true;
+        renderSearchHistory();
+      });
+      
+      // Clear on Escape key
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          searchInput.value = '';
+          updateClearButtonVisibility();
+          
+          if (searchEngine) {
+            searchEngine.setSearchQuery('');
+          }
+          
+          isShowingHistory = true;
+          renderSearchHistory();
+        }
+      });
+      
+      // Show tabs and groups when losing focus
+      searchInput.addEventListener('blur', () => {
+        // Small delay to allow button clicks to register first
+        setTimeout(() => {
+          if (searchInput && searchInput.value.trim() === '') {
+            isShowingHistory = false;
+            renderTabs(tabs, []);
+          }
+        }, 150);
       });
     }
 
@@ -674,11 +735,12 @@ if (searchInput) {
     const query = e.target.value.trim();
 
     if (!query) {
-      // Show search history when input is empty
+      // Show tabs when input becomes empty (not history)
       filteredTabs = tabs;
       headingSearchResults = [];
-      renderSearchHistory();
-      if (tabCountEl) tabCountEl.textContent = 'Recent searches';
+      isShowingHistory = false;
+      renderTabs(tabs, []);
+      if (tabCountEl) tabCountEl.textContent = `${tabs.length} tabs`;
       return;
     }
 
