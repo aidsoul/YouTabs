@@ -11,6 +11,11 @@ class YouTabsSidebar extends YouTabsCore {
       shouldCloseWindow: false
     });
     
+    // Search history state
+    this.searchHistory = [];
+    this.isShowingHistory = false;
+    this.historySelectedIndex = -1;
+    
     // Initialize DOM elements
     this.tabsList = document.getElementById('tabsList');
     this.tabCount = document.getElementById('tabCount');
@@ -77,13 +82,54 @@ class YouTabsSidebar extends YouTabsCore {
     // Search functionality
     if (this.searchInput) {
       this.searchInput.addEventListener('input', (e) => {
-        this.setSearchQuery(e.target.value);
+        const query = e.target.value.trim();
+        
+        if (!query) {
+          // Show history when input is empty
+          this.loadSearchHistory().then(() => {
+            this.renderSearchHistory();
+          });
+        } else {
+          // Hide history and search
+          this.isShowingHistory = false;
+          this.setSearchQuery(query);
+        }
         this.updateSearchClearButton();
+      });
+      
+      this.searchInput.addEventListener('focus', (e) => {
+        const query = e.target.value.trim();
+        
+        if (!query) {
+          this.loadSearchHistory().then(() => {
+            this.renderSearchHistory();
+          });
+        }
       });
       
       this.searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-          this.clearSearchInput();
+          if (this.isShowingHistory) {
+            this.isShowingHistory = false;
+            this.renderTabsList();
+          } else {
+            this.clearSearchInput();
+          }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (this.isShowingHistory) {
+            this.navigateHistory(1);
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (this.isShowingHistory) {
+            this.navigateHistory(-1);
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (this.isShowingHistory) {
+            this.selectHistoryItem();
+          }
         }
       });
     }
@@ -382,6 +428,12 @@ class YouTabsSidebar extends YouTabsCore {
     // Don't switch if clicking close button
     if (e.target.closest('.tab-close')) return;
     
+    // Save search query before switching tabs
+    const query = this.searchInput?.value?.trim();
+    if (query) {
+      this.saveSearchQuery(query);
+    }
+    
     // Activate tab
     browser.tabs.update(tab.id, { active: true });
     browser.windows.update(tab.windowId, { focused: true });
@@ -426,6 +478,165 @@ class YouTabsSidebar extends YouTabsCore {
     } catch (error) {
       console.error('Error opening settings:', error);
     }
+  }
+  
+  // ==================== Search History Functions ====================
+  
+  /**
+   * Load search history from IndexedDB
+   */
+  async loadSearchHistory() {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.getSearchHistory) {
+        this.searchHistory = await window.YouTabsDB.getSearchHistory(30);
+      }
+    } catch (error) {
+      console.error('Error loading search history:', error);
+      this.searchHistory = [];
+    }
+  }
+  
+  /**
+   * Save search query to history
+   */
+  async saveSearchQuery(query) {
+    if (!query || query.trim().length === 0) return;
+    
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.addSearchQuery) {
+        await window.YouTabsDB.addSearchQuery(query.trim());
+        await this.loadSearchHistory();
+      }
+    } catch (error) {
+      console.error('Error saving search query:', error);
+    }
+  }
+  
+  /**
+   * Render search history dropdown
+   */
+  renderSearchHistory(filter = '') {
+    if (!this.tabsList) return;
+    
+    // Filter history based on input
+    let filteredHistory = this.searchHistory;
+    if (filter && filter.length > 0) {
+      filteredHistory = this.searchHistory.filter(item => 
+        item.query.toLowerCase().includes(filter.toLowerCase())
+      );
+    }
+    
+    // Show empty state if no history
+    if (filteredHistory.length === 0) {
+      this.tabsList.innerHTML = `
+        <div class="sidebar-history-empty">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <p>${filter ? 'No matching searches' : 'No recent searches'}</p>
+        </div>
+      `;
+      if (this.tabCount) this.tabCount.textContent = filter ? '0' : '0';
+      return;
+    }
+    
+    this.isShowingHistory = true;
+    this.historySelectedIndex = -1;
+    
+    // Render history items
+    const html = filteredHistory.map((item, index) => `
+      <div class="sidebar-history-item ${index === this.historySelectedIndex ? 'selected' : ''}" data-query="${this.escapeHtml(item.query)}" data-index="${index}">
+        <svg class="history-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span class="history-query">${this.escapeHtml(item.query)}</span>
+        ${item.count > 1 ? `<span class="history-count">×${item.count}</span>` : ''}
+        <button class="delete-history-item" data-id="${item.id}" title="Remove">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    `).join('');
+    
+    this.tabsList.innerHTML = html;
+    
+    // Add event listeners
+    this.tabsList.querySelectorAll('.sidebar-history-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.delete-history-item')) return;
+        const query = item.dataset.query;
+        if (this.searchInput) {
+          this.searchInput.value = query;
+          this.setSearchQuery(query);
+          this.isShowingHistory = false;
+        }
+      });
+    });
+    
+    // Delete buttons
+    this.tabsList.querySelectorAll('.delete-history-item').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id);
+        try {
+          if (window.YouTabsDB && window.YouTabsDB.deleteSearchHistoryItem) {
+            await window.YouTabsDB.deleteSearchHistoryItem(id);
+            await this.loadSearchHistory();
+            const currentFilter = this.searchInput?.value.trim() || '';
+            this.renderSearchHistory(currentFilter);
+          }
+        } catch (error) {
+          console.error('Error deleting history item:', error);
+        }
+      });
+    });
+    
+    if (this.tabCount) this.tabCount.textContent = `${filteredHistory.length}`;
+  }
+  
+  /**
+   * Navigate through history items with arrow keys
+   */
+  navigateHistory(direction) {
+    const items = this.tabsList?.querySelectorAll('.sidebar-history-item');
+    if (!items || items.length === 0) return;
+    
+    this.historySelectedIndex = Math.max(0, Math.min(this.historySelectedIndex + direction, items.length - 1));
+    
+    items.forEach((item, index) => {
+      item.classList.toggle('selected', index === this.historySelectedIndex);
+      if (index === this.historySelectedIndex) {
+        item.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+  
+  /**
+   * Select current history item on Enter
+   */
+  selectHistoryItem() {
+    const items = this.tabsList?.querySelectorAll('.sidebar-history-item');
+    if (items && items[this.historySelectedIndex]) {
+      const query = items[this.historySelectedIndex].dataset.query;
+      if (this.searchInput) {
+        this.searchInput.value = query;
+        this.setSearchQuery(query);
+        this.isShowingHistory = false;
+      }
+    }
+  }
+  
+  /**
+   * Escape HTML to prevent XSS
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }
 

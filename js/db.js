@@ -4,10 +4,11 @@
  */
 
 const DB_NAME = 'YouTabsDB';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 const STORE_CUSTOM_GROUPS = 'customGroups';
 const STORE_GROUP_TAB_METADATA = 'groupTabMetadata';
 const STORE_PAGES_INDEX = 'pagesIndex';
+const STORE_SEARCH_HISTORY = 'searchHistory';
 
 // Database instance
 let dbInstance = null;
@@ -62,6 +63,14 @@ function openDatabase() {
       const pagesIndexStore = db.createObjectStore(STORE_PAGES_INDEX, { keyPath: 'url' });
       // Add secondary index on indexedAt for efficient expiration cleanup
       pagesIndexStore.createIndex('indexedAt', 'indexedAt', { unique: false });
+
+      // Create searchHistory store
+      if (!db.objectStoreNames.contains(STORE_SEARCH_HISTORY)) {
+        const searchHistoryStore = db.createObjectStore(STORE_SEARCH_HISTORY, { keyPath: 'id', autoIncrement: true });
+        // Add indexes for querying
+        searchHistoryStore.createIndex('query', 'query', { unique: false });
+        searchHistoryStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
     };
   });
 }
@@ -670,6 +679,213 @@ function isIndexedDBAvailable() {
 }
 
 /**
+ * Add a search query to search history
+ * @param {string} query - The search query to save
+ * @returns {Promise<number>} - Returns the ID of the inserted record
+ */
+async function addSearchQuery(query) {
+  if (!query || typeof query !== 'string' || query.trim().length === 0) {
+    return Promise.resolve(null);
+  }
+  
+  const db = await openDatabase();
+  const trimmedQuery = query.trim();
+  const timestamp = Date.now();
+  const MAX_HISTORY = 30;
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_SEARCH_HISTORY], 'readwrite');
+    const store = transaction.objectStore(STORE_SEARCH_HISTORY);
+    
+    // First, check if this query already exists
+    const index = store.index('query');
+    const getRequest = index.get(trimmedQuery);
+    
+    getRequest.onsuccess = () => {
+      const existingRecord = getRequest.result;
+      
+      if (existingRecord) {
+        // Update existing record's timestamp
+        const updateRequest = store.put({
+          id: existingRecord.id,
+          query: trimmedQuery,
+          timestamp: timestamp,
+          count: (existingRecord.count || 1) + 1
+        });
+        
+        updateRequest.onsuccess = () => {
+          // Clean up old entries after update
+          cleanupOldEntries(store, MAX_HISTORY);
+          resolve(existingRecord.id);
+        };
+        updateRequest.onerror = () => reject(updateRequest.error);
+      } else {
+        // Add new record
+        const addRequest = store.add({
+          query: trimmedQuery,
+          timestamp: timestamp,
+          count: 1
+        });
+        
+        addRequest.onsuccess = () => {
+          // Clean up old entries after adding
+          cleanupOldEntries(store, MAX_HISTORY);
+          resolve(addRequest.result);
+        };
+        addRequest.onerror = () => reject(addRequest.error);
+      }
+    };
+    
+    getRequest.onerror = () => {
+      // If we can't check existing, just add new
+      const addRequest = store.add({
+        query: trimmedQuery,
+        timestamp: timestamp,
+        count: 1
+      });
+      
+      addRequest.onsuccess = () => {
+        // Clean up old entries after adding
+        cleanupOldEntries(store, MAX_HISTORY);
+        resolve(addRequest.result);
+      };
+      addRequest.onerror = () => reject(addRequest.error);
+    };
+  });
+}
+
+/**
+ * Clean up old search history entries to keep only the most recent ones
+ * @param {IDBObjectStore} store - The search history object store
+ * @param {number} maxEntries - Maximum number of entries to keep
+ */
+function cleanupOldEntries(store, maxEntries) {
+  const index = store.index('timestamp');
+  const request = index.openCursor(null, 'prev');
+  
+  let count = 0;
+  const toDelete = [];
+  
+  request.onsuccess = (event) => {
+    const cursor = event.target.result;
+    if (cursor) {
+      count++;
+      if (count > maxEntries) {
+        toDelete.push(cursor.primaryKey);
+      }
+      cursor.continue();
+    }
+  };
+  
+  request.transaction.oncomplete = () => {
+    // Delete old entries
+    if (toDelete.length > 0) {
+      toDelete.forEach(id => store.delete(id));
+    }
+  };
+}
+
+/**
+ * Get search history
+ * @param {number} limit - Maximum number of entries to return (default: 30)
+ * @param {string} filter - Optional filter string to search in history
+ * @returns {Promise<Array>} - Returns array of search history entries
+ */
+async function getSearchHistory(limit = 30, filter = '') {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_SEARCH_HISTORY], 'readonly');
+    const store = transaction.objectStore(STORE_SEARCH_HISTORY);
+    const index = store.index('timestamp');
+    
+    // Get all entries ordered by timestamp (newest first)
+    const request = index.openCursor(null, 'prev');
+    
+    const results = [];
+    
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      
+      if (cursor) {
+        const record = cursor.value;
+        
+        // Apply filter if provided
+        if (filter && filter.length > 0) {
+          if (record.query.toLowerCase().includes(filter.toLowerCase())) {
+            results.push(record);
+          }
+        } else {
+          results.push(record);
+        }
+        
+        // Only continue if we haven't reached the limit
+        if (results.length < limit) {
+          cursor.continue();
+        }
+      }
+    };
+    
+    transaction.oncomplete = () => {
+      resolve(results);
+    };
+    
+    transaction.onerror = () => {
+      console.error('IndexedDB: Failed to get search history', transaction.error);
+      reject(transaction.error);
+    };
+  });
+}
+
+/**
+ * Clear all search history
+ * @returns {Promise<void>}
+ */
+async function clearSearchHistory() {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_SEARCH_HISTORY], 'readwrite');
+    const store = transaction.objectStore(STORE_SEARCH_HISTORY);
+    const request = store.clear();
+    
+    request.onsuccess = () => {
+      console.log('IndexedDB: Search history cleared');
+      resolve();
+    };
+    
+    request.onerror = () => {
+      console.error('IndexedDB: Failed to clear search history', request.error);
+      reject(request.error);
+    };
+  });
+}
+
+/**
+ * Delete a single search history item by ID
+ * @param {number} id - The ID of the search history item to delete
+ * @returns {Promise<void>}
+ */
+async function deleteSearchHistoryItem(id) {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_SEARCH_HISTORY], 'readwrite');
+    const store = transaction.objectStore(STORE_SEARCH_HISTORY);
+    const request = store.delete(id);
+    
+    request.onsuccess = () => {
+      resolve();
+    };
+    
+    request.onerror = () => {
+      console.error('IndexedDB: Failed to delete search history item', request.error);
+      reject(request.error);
+    };
+  });
+}
+
+/**
  * Migrate from old YouTabsHeadings IndexedDB to YouTabsDB
  * @returns {Promise<boolean>} - Returns true if migration was performed
  */
@@ -715,6 +931,11 @@ if (typeof window !== 'undefined') {
     cleanupMaxPages,
     migrateFromLocalStorage,
     migrateFromYouTabsHeadings,
-    isIndexedDBAvailable
+    isIndexedDBAvailable,
+    // Search history functions
+    addSearchQuery,
+    getSearchHistory,
+    clearSearchHistory,
+    deleteSearchHistoryItem
   };
 }

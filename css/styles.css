@@ -616,6 +616,97 @@ body {
   box-sizing: border-box;
 }
 
+/* ==================== Search History ==================== */
+
+.sidebar-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-muted, #6c6c7a);
+}
+
+.sidebar-history-empty svg {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.sidebar-history-empty p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary, #9898a6);
+}
+
+.sidebar-history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-history-item:hover {
+  background: var(--bg-hover, #2d2d3d);
+  border-left-color: var(--accent-color, #6364f0);
+}
+
+.sidebar-history-item.selected {
+  background: var(--bg-tertiary, #252532);
+  border-left-color: var(--accent-color, #6364f0);
+}
+
+.sidebar-history-item .history-icon {
+  flex-shrink: 0;
+  color: var(--text-muted, #6c6c7a);
+}
+
+.sidebar-history-item .history-query {
+  flex: 1;
+  color: var(--text-primary, #e8e8ed);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-history-item .history-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted, #6c6c7a);
+  background: var(--bg-tertiary, #252532);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.sidebar-history-item .delete-history-item {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--text-muted, #6c6c7a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 150ms ease;
+}
+
+.sidebar-history-item:hover .delete-history-item {
+  opacity: 1;
+}
+
+.sidebar-history-item .delete-history-item:hover {
+  background: var(--danger-color, #f87171);
+  color: white;
+}
+
 /* Responsive adjustments */
 @media (min-width: 400px) {
   .you-tabs-container {

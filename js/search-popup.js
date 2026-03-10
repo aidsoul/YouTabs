@@ -9,6 +9,8 @@ let headingSearchResults = [];
 let selectedIndex = -1;
 let searchEngine = null;
 let settings = null;
+let searchHistory = [];
+let isShowingHistory = false;
 
 // Get elements
 const searchInput = document.getElementById('searchPopupInput');
@@ -54,8 +56,16 @@ async function init() {
     // Load indexed page headings from IndexedDB
     await searchEngine.loadPageHeadings();
 
-    // Initial render with all tabs
-    renderTabs(tabs, []);
+    // Load search history
+    await loadSearchHistory();
+
+    // Initial render - always try to show history when input is empty
+    const initialQuery = searchInput?.value?.trim() || '';
+    if (!initialQuery) {
+      renderSearchHistory();
+    } else {
+      renderTabs(tabs, []);
+    }
 
     // Focus input
     searchInput.focus();
@@ -72,6 +82,155 @@ async function init() {
         </div>
       `;
     }
+  }
+}
+
+// Load search history
+async function loadSearchHistory() {
+  try {
+    if (window.YouTabsDB && window.YouTabsDB.getSearchHistory) {
+      searchHistory = await window.YouTabsDB.getSearchHistory(30);
+      console.log('Search history loaded:', searchHistory.length, 'items');
+    } else {
+      console.warn('YouTabsDB.getSearchHistory not available');
+      searchHistory = [];
+    }
+  } catch (error) {
+    console.error('Error loading search history:', error);
+    searchHistory = [];
+  }
+}
+
+// Save search query to history
+async function saveSearchQuery(query) {
+  if (!query || query.trim().length === 0) return;
+  
+  try {
+    if (window.YouTabsDB && window.YouTabsDB.addSearchQuery) {
+      await window.YouTabsDB.addSearchQuery(query.trim());
+      // Reload history after saving
+      await loadSearchHistory();
+    }
+  } catch (error) {
+    console.error('Error saving search query:', error);
+  }
+}
+
+// Render search history dropdown
+function renderSearchHistory(filter = '') {
+  if (!tabsList) return;
+  
+  // Filter history based on input
+  let filteredHistory = searchHistory;
+  if (filter && filter.length > 0) {
+    filteredHistory = searchHistory.filter(item => 
+      item.query.toLowerCase().includes(filter.toLowerCase())
+    );
+  }
+  
+  // Show empty state message if no history
+  if (filteredHistory.length === 0) {
+    // If there's a filter, show "no results" for filter
+    // Otherwise show "no recent searches" message
+    tabsList.innerHTML = `
+      <div class="search-history-empty">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <p>${filter ? 'No matching searches' : 'No recent searches'}</p>
+        <span class="search-history-hint">${filter ? 'Try a different search term' : 'Your search history will appear here'}</span>
+      </div>
+    `;
+    if (tabCountEl) tabCountEl.textContent = filter ? 'No results' : 'No history';
+    return;
+  }
+  
+  isShowingHistory = true;
+  
+  const html = `
+    <div class="search-history-container">
+      <div class="search-history-header">
+        <span>Recent Searches</span>
+        <button class="clear-history-btn" id="clearHistoryBtn" title="Clear history">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="search-history-list">
+        ${filteredHistory.map((item, index) => `
+          <div class="search-history-item" data-query="${escapeHtml(item.query)}" data-id="${item.id}">
+            <svg class="history-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span class="history-query">${escapeHtml(item.query)}</span>
+            <span class="history-count">${item.count > 1 ? `×${item.count}` : ''}</span>
+            <button class="delete-history-item" data-id="${item.id}" title="Remove">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  
+  tabsList.innerHTML = html;
+  
+  // Add event listeners for history items
+  tabsList.querySelectorAll('.search-history-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.delete-history-item')) return;
+      const query = item.dataset.query;
+      if (searchInput) {
+        searchInput.value = query;
+        // Trigger search
+        searchEngine.setSearchQuery(query);
+        isShowingHistory = false;
+      }
+    });
+  });
+  
+  // Add event listener for delete buttons
+  tabsList.querySelectorAll('.delete-history-item').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = parseInt(btn.dataset.id);
+      try {
+        if (window.YouTabsDB && window.YouTabsDB.deleteSearchHistoryItem) {
+          await window.YouTabsDB.deleteSearchHistoryItem(id);
+          await loadSearchHistory();
+          // Re-render with current filter
+          const currentFilter = searchInput?.value.trim() || '';
+          renderSearchHistory(currentFilter);
+        }
+      } catch (error) {
+        console.error('Error deleting history item:', error);
+      }
+    });
+  });
+  
+  // Add event listener for clear history button
+  const clearBtn = document.getElementById('clearHistoryBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        if (window.YouTabsDB && window.YouTabsDB.clearSearchHistory) {
+          await window.YouTabsDB.clearSearchHistory();
+          searchHistory = [];
+          isShowingHistory = false;
+          // Re-render tabs
+          renderTabs(tabs, []);
+        }
+      } catch (error) {
+        console.error('Error clearing history:', error);
+      }
+    });
   }
 }
 
@@ -434,6 +593,11 @@ function renderHeadingSearchResults(tabsToRender, headings) {
           browser.tabs.onUpdated.addListener(loadListener);
         }
 
+        // Save search query to history
+        if (searchQuery) {
+          saveSearchQuery(searchQuery);
+        }
+
         // Close popup
         window.close();
       } catch (error) {
@@ -491,6 +655,12 @@ async function openResultByElement(item) {
       await browser.tabs.create({ url: url, active: true });
     }
 
+    // Save search query to history
+    const query = searchInput?.value.trim();
+    if (query) {
+      saveSearchQuery(query);
+    }
+
     // Close popup
     window.close();
   } catch (error) {
@@ -504,15 +674,29 @@ if (searchInput) {
     const query = e.target.value.trim();
 
     if (!query) {
-      // Show all tabs when query is empty
+      // Show search history when input is empty
       filteredTabs = tabs;
       headingSearchResults = [];
-      renderTabs(tabs, []);
+      renderSearchHistory();
+      if (tabCountEl) tabCountEl.textContent = 'Recent searches';
       return;
     }
 
+    // Hide history, show search results
+    isShowingHistory = false;
+    
     // Use SearchEngine for searching
     searchEngine.setSearchQuery(query);
+  });
+
+  searchInput.addEventListener('focus', (e) => {
+    const query = e.target.value.trim();
+    
+    // Show history when input is empty on focus
+    if (!query && searchHistory.length > 0) {
+      renderSearchHistory();
+      if (tabCountEl) tabCountEl.textContent = 'Recent searches';
+    }
   });
 
   searchInput.addEventListener('keydown', (e) => {
@@ -520,18 +704,66 @@ if (searchInput) {
       window.close();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const totalItems = filteredTabs.length + headingSearchResults.length;
-      selectedIndex = Math.min(selectedIndex + 1, totalItems - 1);
-      updateSelection();
+      if (isShowingHistory) {
+        // Navigate history items
+        const historyItems = tabsList?.querySelectorAll('.search-history-item');
+        if (historyItems && historyItems.length > 0) {
+          selectedIndex = Math.min(selectedIndex + 1, historyItems.length - 1);
+          updateHistorySelection(historyItems);
+        }
+      } else {
+        const totalItems = filteredTabs.length + headingSearchResults.length;
+        selectedIndex = Math.min(selectedIndex + 1, totalItems - 1);
+        updateSelection();
+      }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      selectedIndex = Math.max(selectedIndex - 1, 0);
-      updateSelection();
+      if (isShowingHistory) {
+        const historyItems = tabsList?.querySelectorAll('.search-history-item');
+        if (historyItems && historyItems.length > 0) {
+          selectedIndex = Math.max(selectedIndex - 1, 0);
+          updateHistorySelection(historyItems);
+        }
+      } else {
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        updateSelection();
+      }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (selectedIndex >= 0) {
+      
+      if (isShowingHistory) {
+        // Select current history item
+        const historyItems = tabsList?.querySelectorAll('.search-history-item');
+        if (historyItems && historyItems[selectedIndex]) {
+          const query = historyItems[selectedIndex].dataset.query;
+          searchInput.value = query;
+          searchEngine.setSearchQuery(query);
+          isShowingHistory = false;
+        }
+      } else if (selectedIndex >= 0) {
         openResult(selectedIndex);
+        // Save search query after opening result
+        const query = searchInput.value.trim();
+        if (query) {
+          saveSearchQuery(query);
+        }
+      } else {
+        // Save search query even if no result selected
+        const query = searchInput.value.trim();
+        if (query) {
+          saveSearchQuery(query);
+        }
       }
+    }
+  });
+}
+
+// Update history item selection
+function updateHistorySelection(historyItems) {
+  historyItems.forEach((item, index) => {
+    item.classList.toggle('selected', index === selectedIndex);
+    if (index === selectedIndex) {
+      item.scrollIntoView({ block: 'nearest' });
     }
   });
 }
@@ -580,6 +812,21 @@ async function openResult(index) {
     }
   }
 }
+
+// Close history when clicking outside
+document.addEventListener('click', (e) => {
+  if (isShowingHistory && !e.target.closest('.search-history-container') && e.target !== searchInput) {
+    const query = searchInput?.value.trim();
+    if (!query) {
+      // Refresh history to ensure it's still current
+      loadSearchHistory().then(() => {
+        renderSearchHistory();
+      });
+    } else {
+      isShowingHistory = false;
+    }
+  }
+});
 
 // Initialize on load
 init();
