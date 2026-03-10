@@ -142,14 +142,80 @@ function fuzzyMatch(query, text, maxDistance = 2) {
   return { match: false, distance: Infinity, score: 0 };
 }
 
+/**
+ * Perform regex matching between pattern and text
+ * @param {string} pattern - Regex pattern string
+ * @param {string} text - Text to search in
+ * @param {string} flags - Regex flags (default: 'i' for case-insensitive)
+ * @returns {Object} Match result with match, matches, and error properties
+ */
+function regexMatch(pattern, text, flags = 'i') {
+  if (!pattern || !text) {
+    return { match: false, matches: [], error: null };
+  }
+  
+  try {
+    const regex = new RegExp(pattern, flags);
+    const matches = [];
+    let match;
+    
+    // Find all matches
+    while ((match = regex.exec(text)) !== null) {
+      matches.push({
+        value: match[0],
+        index: match.index,
+        groups: match.slice(1),
+        namedGroups: match.groups || {}
+      });
+      
+      // Prevent infinite loop for zero-width matches
+      if (match.index === regex.lastIndex) {
+        regex.lastIndex++;
+      }
+    }
+    
+    return {
+      match: matches.length > 0,
+      matches,
+      error: null
+    };
+  } catch (error) {
+    return {
+      match: false,
+      matches: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Validate if a string is a valid regex pattern
+ * @param {string} pattern - Pattern to validate
+ * @returns {Object} Validation result with valid boolean and error message
+ */
+function validateRegexPattern(pattern) {
+  if (!pattern) {
+    return { valid: false, error: 'Pattern is empty' };
+  }
+  
+  try {
+    new RegExp(pattern);
+    return { valid: true, error: null };
+  } catch (error) {
+    return { valid: false, error: error.message };
+  }
+}
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { debounce, levenshteinDistance, fuzzyMatch };
+  module.exports = { debounce, levenshteinDistance, fuzzyMatch, regexMatch, validateRegexPattern };
 }
 
 // Export to global scope for browser extension
 window.SearchUtils = {
   debounce,
   levenshteinDistance,
-  fuzzyMatch
+  fuzzyMatch,
+  regexMatch,
+  validateRegexPattern
 };

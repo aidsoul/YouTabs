@@ -32,6 +32,7 @@ class YouTabsPopup extends YouTabsCore {
     
     // Filter UI elements
     this.searchFilter = document.getElementById('searchFilter');
+    this.searchRegex = document.getElementById('searchRegex');
     this.filterModalOverlay = document.getElementById('filterModalOverlay');
     this.filterModalClose = document.getElementById('filterModalClose');
     this.filterTabs = document.getElementById('filterTabs');
@@ -134,6 +135,14 @@ class YouTabsPopup extends YouTabsCore {
       });
     }
     
+    // Regex toggle button click
+    if (this.searchRegex) {
+      this.searchRegex.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleRegexMode();
+      });
+    }
+    
     // Modal close button
     if (this.filterModalClose) {
       this.filterModalClose.addEventListener('click', () => {
@@ -229,6 +238,43 @@ class YouTabsPopup extends YouTabsCore {
     }
     if (this.filterHeadingsMenu) {
       this.filterHeadingsMenu.classList.remove('open');
+    }
+  }
+  
+  /**
+   * Toggle regex search mode
+   */
+  toggleRegexMode() {
+    if (!this.searchEngine) return;
+    
+    const currentMode = this.searchEngine.getRegexMode();
+    this.searchEngine.setRegexMode(!currentMode);
+    
+    // Update UI
+    if (this.searchRegex) {
+      this.searchRegex.classList.toggle('active', !currentMode);
+    }
+    
+    // Re-run search with new mode
+    if (this.searchInput && this.searchInput.value) {
+      this.setSearchQuery(this.searchInput.value);
+    }
+  }
+  
+  /**
+   * Update regex button state based on search results
+   * @param {Object} searchResults - Search results from SearchEngine
+   */
+  updateRegexButtonState(searchResults) {
+    if (!this.searchRegex) return;
+    
+    // Show error state if there's a regex error
+    if (searchResults.useRegex && searchResults.regexError) {
+      this.searchRegex.classList.add('error');
+      this.searchRegex.title = `Regex Error: ${searchResults.regexError}`;
+    } else {
+      this.searchRegex.classList.remove('error');
+      this.searchRegex.title = searchResults.useRegex ? 'Regex Search (.*) - ON' : 'Regex Search (.*)';
     }
   }
   

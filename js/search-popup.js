@@ -14,6 +14,7 @@ let settings = null;
 const searchInput = document.getElementById('searchPopupInput');
 const tabsList = document.getElementById('tabsList');
 const tabCountEl = document.getElementById('tabCount');
+const searchRegexBtn = document.getElementById('searchRegexBtn');
 
 // Initialize
 async function init() {
@@ -34,6 +35,21 @@ async function init() {
       onSearchResults: handleSearchResults,
       onError: (error) => console.error('SearchEngine error:', error)
     });
+    
+    // Setup regex button if exists
+    if (searchRegexBtn) {
+      searchRegexBtn.addEventListener('click', () => {
+        if (!searchEngine) return;
+        const currentMode = searchEngine.getRegexMode();
+        searchEngine.setRegexMode(!currentMode);
+        searchRegexBtn.classList.toggle('active', !currentMode);
+        
+        // Re-run search with new mode
+        if (searchInput && searchInput.value) {
+          searchEngine.setSearchQuery(searchInput.value);
+        }
+      });
+    }
 
     // Load indexed page headings from IndexedDB
     await searchEngine.loadPageHeadings();
@@ -63,6 +79,18 @@ async function init() {
 function handleSearchResults(results) {
   filteredTabs = results.filteredTabs || [];
   headingSearchResults = results.headingResults || [];
+  
+  // Update regex button state if exists
+  if (searchRegexBtn) {
+    if (results.useRegex && results.regexError) {
+      searchRegexBtn.classList.add('error');
+      searchRegexBtn.title = `Regex Error: ${results.regexError}`;
+    } else {
+      searchRegexBtn.classList.remove('error');
+      searchRegexBtn.title = results.useRegex ? 'Regex Search (.*) - ON' : 'Regex Search (.*)';
+    }
+  }
+  
   renderTabs(filteredTabs, headingSearchResults);
 }
 

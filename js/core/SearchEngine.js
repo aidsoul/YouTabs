@@ -36,6 +36,10 @@ class SearchEngine {
     this.filteredTabs = [];
     this.headingSearchResults = [];
     
+    // Regex search mode
+    this.useRegex = false;
+    this.lastRegexError = null;
+    
     // Filter state
     this.filterTabs = true;
     this.filterHeadingTypes = ['heading', 'paragraph', 'link', 'image', 'div', 'ul', 'ol', 'li', 'input', 'video', 'audio', 'iframe', 'span', 'table', 'section', 'article', 'aside', 'nav', 'footer', 'header', 'blockquote', 'code', 'pre', 'cite', 'abbr', 'time', 'mark', 'button', 'textarea', 'select', 'label', 'figure', 'details', 'summary', 'meta', 'aria', 'data'];
@@ -227,6 +231,81 @@ class SearchEngine {
   // ==================== Public Search API ====================
   
   /**
+   * Set regex search mode on/off
+   * @param {boolean} useRegex - Whether to use regex matching
+   */
+  setRegexMode(useRegex) {
+    this.useRegex = Boolean(useRegex);
+    this.lastRegexError = null;
+    
+    // Re-run search if there's an active search query
+    if (this.searchQuery) {
+      this._debouncedPerformSearch(this.searchQuery);
+    }
+    
+    // Notify listener about regex mode change
+    if (this.options.onSearchResults) {
+      this.options.onSearchResults({
+        query: this.searchQuery,
+        filteredTabs: this.filteredTabs,
+        headingResults: this.headingSearchResults,
+        useRegex: this.useRegex,
+        regexError: this.lastRegexError
+      });
+    }
+  }
+  
+  /**
+   * Get current regex mode state
+   * @returns {boolean} Current regex mode state
+   */
+  getRegexMode() {
+    return this.useRegex;
+  }
+  
+  /**
+   * Check if regex mode is enabled
+   * @returns {boolean} True if regex mode is enabled
+   */
+  isRegexMode() {
+    return this.useRegex;
+  }
+  
+  /**
+   * Get last regex error message
+   * @returns {string|null} Error message or null if no error
+   */
+  getLastRegexError() {
+    return this.lastRegexError;
+  }
+  
+  /**
+   * Validate a regex pattern without performing search
+   * @param {string} pattern - Regex pattern to validate
+   * @returns {Object} Validation result with valid boolean and error message
+   */
+  validateRegexPattern(pattern) {
+    const result = window.SearchUtils?.validateRegexPattern(pattern);
+    return result !== undefined ? result : SearchEngine._inlineValidateRegex(pattern);
+  }
+  
+  /**
+   * Inline regex validation as fallback
+   * @private
+   */
+  static _inlineValidateRegex(pattern) {
+    if (!pattern) {
+      return { valid: false, error: 'Pattern is empty' };
+    }
+    try {
+      new RegExp(pattern);
+      return { valid: true, error: null };
+    } catch (error) {
+      return { valid: false, error: error.message };
+    }
+  }
+  
+  /**
    * Set the search query and trigger search
    * @param {string} query - Search query
    */
@@ -316,12 +395,13 @@ class SearchEngine {
   async _performSearch(query) {
     const lowerQuery = query?.toLowerCase() || '';
     this.searchQuery = lowerQuery;
+    this.lastRegexError = null;
     
     const tabs = this.options.getTabs();
     const tabsVersion = this._cacheVersion;
     
-    // Check cache first
-    if (lowerQuery && this.filterTabs) {
+    // Check cache first (only for non-regex searches)
+    if (lowerQuery && this.filterTabs && !this.useRegex) {
       const cacheKey = `${lowerQuery}:${tabs.length}:${tabsVersion}`;
       const cached = this._searchCache.get(cacheKey);
       if (cached) {
@@ -337,6 +417,9 @@ class SearchEngine {
         }
         this._searchCache.set(cacheKey, this.filteredTabs);
       }
+    } else if (lowerQuery && this.filterTabs && this.useRegex) {
+      // Regex search - don't use cache
+      this.filteredTabs = this._filterTabsListWithRegex(tabs, query);
     } else {
       this.filteredTabs = [];
     }
@@ -356,7 +439,9 @@ class SearchEngine {
       this.options.onSearchResults({
         query: lowerQuery,
         filteredTabs: this.filteredTabs,
-        headingResults: this.headingSearchResults
+        headingResults: this.headingSearchResults,
+        useRegex: this.useRegex,
+        regexError: this.lastRegexError
       });
     }
     
@@ -365,7 +450,8 @@ class SearchEngine {
       this.stateManager.setSearchState({
         query: lowerQuery,
         filteredTabs: this.filteredTabs,
-        headingResults: this.headingSearchResults
+        headingResults: this.headingSearchResults,
+        useRegex: this.useRegex
       });
     }
   }
@@ -397,6 +483,121 @@ class SearchEngine {
       
       return title.includes(query) || url.includes(query) || customTabName.includes(query) || groupNameSearch.includes(query);
     });
+  }
+  
+  /**
+   * Filter tabs using regex pattern matching
+   * @param {Array} tabs - Array of tabs to filter
+   * @param {string} pattern - Regex pattern
+   * @returns {Array} Filtered tabs
+   */
+  _filterTabsListWithRegex(tabs, pattern) {
+    if (!pattern) return tabs;
+    
+    const customTabNames = this.options.getCustomTabNames();
+    
+    // Validate pattern first
+    const validation = this.validateRegexPattern(pattern);
+    if (!validation.valid) {
+      this.lastRegexError = validation.error;
+      return [];
+    }
+    
+    this.lastRegexError = null;
+    
+    // Compile regex ONCE before filtering for better performance
+    let regex;
+    try {
+      regex = new RegExp(pattern, 'i');
+    } catch (error) {
+      this.lastRegexError = error.message;
+      return [];
+    }
+    
+    // Create a reusable match function that uses the pre-compiled regex
+    const matchWithRegex = (text) => {
+      if (!text) return { match: false, matches: [], error: null };
+      const matches = [];
+      let match;
+      // Reset lastIndex to ensure fresh matching
+      regex.lastIndex = 0;
+      while ((match = regex.exec(text)) !== null) {
+        matches.push({
+          value: match[0],
+          index: match.index,
+          groups: match.slice(1)
+        });
+        if (match.index === regex.lastIndex) {
+          regex.lastIndex++;
+        }
+      }
+      return {
+        match: matches.length > 0,
+        matches,
+        error: null
+      };
+    };
+    
+    return tabs.filter(tab => {
+      const title = tab.title || '';
+      const url = tab.url || '';
+      
+      // Get custom tab name for this tab
+      const numericTabId = Number(tab.id);
+      const customTabName = customTabNames[numericTabId]?.customName || '';
+      
+      // Get group and subgroup names for this tab
+      const groupNames = this.options.getGroupHierarchyNames(tab.id);
+      const groupNameSearch = groupNames.join(' ');
+      
+      // Perform regex search on each field using pre-compiled regex
+      if (matchWithRegex(title).match) return true;
+      if (matchWithRegex(url).match) return true;
+      if (matchWithRegex(customTabName).match) return true;
+      if (matchWithRegex(groupNameSearch).match) return true;
+      
+      return false;
+    });
+  }
+  
+  /**
+   * Inline regex matching as fallback
+   * @private
+   */
+  static _inlineRegexMatch(pattern, text) {
+    if (!pattern || !text) {
+      return { match: false, matches: [], error: null };
+    }
+    
+    try {
+      const regex = new RegExp(pattern, 'i');
+      const matches = [];
+      let match;
+      
+      while ((match = regex.exec(text)) !== null) {
+        matches.push({
+          value: match[0],
+          index: match.index,
+          groups: match.slice(1)
+        });
+        
+        if (match.index === regex.lastIndex) {
+          regex.lastIndex++;
+        }
+      }
+      
+      return {
+        match: matches.length > 0,
+        matches,
+        error: null
+      };
+    } catch (error) {
+      return {
+        match: false,
+        matches: [],
+        error: error.message
+      };
+    }
   }
   
   // ==================== Page Headings Search ====================

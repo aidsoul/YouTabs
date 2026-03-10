@@ -355,6 +355,48 @@ body {
   box-shadow: 0 2px 4px rgba(59, 116, 231, 0.3);
 }
 
+/* Search Regex Button */
+.search-regex {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: all 100ms ease;
+  margin-left: 4px;
+}
+
+.search-regex:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.search-regex.active {
+  background: var(--yb-blue);
+  color: var(--yb-blue);
+  box-shadow: 0 2px 4px rgba(59, 116, 231, 0.3);
+}
+
+.search-regex.active svg {
+  stroke: white;
+}
+
+.search-regex.error {
+  background: var(--yb-red);
+  color: var(--yb-red);
+  box-shadow: 0 2px 4px rgba(231, 59, 59, 0.3);
+}
+
+.search-regex.error svg {
+  stroke: white;
+}
+
 /* Filter Modal */
 .filter-modal {
   min-width: 280px;

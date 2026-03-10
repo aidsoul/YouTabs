@@ -2358,6 +2358,8 @@ class UIRenderer {
     
     tabItem.addEventListener('click', (e) => this.options.onTabClick(e, tab));
     tabItem.querySelector('.tab-close').addEventListener('click', (e) => this.options.onTabClose(e, tab));
+    
+    // Tab preview event listeners
     tabItem.addEventListener('mouseenter', (e) => this.showTabPreview(e, tab));
     tabItem.addEventListener('mouseleave', () => this.hideTabPreview());
     tabItem.addEventListener('mousemove', (e) => this.updatePreviewPosition(e));

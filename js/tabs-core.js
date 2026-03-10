@@ -167,6 +167,12 @@ class YouTabsCore {
         // Sync search state from SearchEngine
         this.filteredTabs = results.filteredTabs;
         this.headingSearchResults = results.headingResults;
+        
+        // Call updateRegexButtonState if it exists (in popup context)
+        if (typeof this.updateRegexButtonState === 'function') {
+          this.updateRegexButtonState(results);
+        }
+        
         this.renderTabs();
       },
       onError: (error) => console.error('SearchEngine error:', error)
