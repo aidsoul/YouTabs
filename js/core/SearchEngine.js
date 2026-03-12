@@ -297,6 +297,26 @@ class SearchEngine {
     if (!pattern) {
       return { valid: false, error: 'Pattern is empty' };
     }
+    
+    // Check for potentially dangerous patterns that can cause catastrophic backtracking
+    const dangerousPatterns = [
+      { regex: /\(\.*\+\.*\)+/, message: 'Nested quantifiers can cause performance issues' },
+      { regex: /\(\.*\*\.*\)+/, message: 'Nested quantifiers can cause performance issues' },
+      { regex: /\(\s*\|\s*\)+\+/, message: 'Nested alternation can cause performance issues' },
+      { regex: /\.\*\.\*\.\*/, message: 'Multiple greedy quantifiers can cause performance issues' }
+    ];
+    
+    for (const { regex, message } of dangerousPatterns) {
+      if (regex.test(pattern)) {
+        return { valid: false, error: message };
+      }
+    }
+    
+    // Limit pattern length
+    if (pattern.length > 100) {
+      return { valid: false, error: 'Pattern is too long' };
+    }
+    
     try {
       new RegExp(pattern);
       return { valid: true, error: null };
@@ -515,22 +535,53 @@ class SearchEngine {
     }
     
     // Create a reusable match function that uses the pre-compiled regex
+    // With protection against infinite loops, memory exhaustion, and long-running execution
+    const MAX_MATCHES_PER_FIELD = 1000;
+    const MAX_REGEX_TIME_MS = 2000; // 2 second timeout
     const matchWithRegex = (text) => {
       if (!text) return { match: false, matches: [], error: null };
       const matches = [];
       let match;
+      let matchCount = 0;
+      const startTime = performance.now();
+      
       // Reset lastIndex to ensure fresh matching
       regex.lastIndex = 0;
-      while ((match = regex.exec(text)) !== null) {
-        matches.push({
-          value: match[0],
-          index: match.index,
-          groups: match.slice(1)
-        });
-        if (match.index === regex.lastIndex) {
-          regex.lastIndex++;
+      
+      // Use try-catch with limit to prevent catastrophic backtracking
+      try {
+        while ((match = regex.exec(text)) !== null) {
+          // Check timeout
+          if (performance.now() - startTime > MAX_REGEX_TIME_MS) {
+            return { 
+              match: matches.length > 0, 
+              matches, 
+              error: 'Regex search timed out' 
+            };
+          }
+          
+          matches.push({
+            value: match[0],
+            index: match.index,
+            groups: match.slice(1)
+          });
+          matchCount++;
+          
+          // Limit matches to prevent memory exhaustion
+          if (matchCount >= MAX_MATCHES_PER_FIELD) {
+            break;
+          }
+          
+          // Prevent infinite loop for zero-width matches
+          if (match.index === regex.lastIndex) {
+            regex.lastIndex++;
+          }
         }
+      } catch (e) {
+        // Regex execution error - return empty results
+        return { match: false, matches: [], error: e.message };
       }
+      
       return {
         match: matches.length > 0,
         matches,
@@ -569,17 +620,36 @@ class SearchEngine {
       return { match: false, matches: [], error: null };
     }
     
+    const MAX_MATCHES = 1000;
+    const MAX_REGEX_TIME_MS = 2000; // 2 second timeout
+    const startTime = performance.now();
+    
     try {
       const regex = new RegExp(pattern, 'i');
       const matches = [];
       let match;
+      let matchCount = 0;
       
       while ((match = regex.exec(text)) !== null) {
+        // Check timeout
+        if (performance.now() - startTime > MAX_REGEX_TIME_MS) {
+          return { 
+            match: matches.length > 0, 
+            matches, 
+            error: 'Regex search timed out' 
+          };
+        }
+        
         matches.push({
           value: match[0],
           index: match.index,
           groups: match.slice(1)
         });
+        
+        matchCount++;
+        if (matchCount >= MAX_MATCHES) {
+          break;
+        }
         
         if (match.index === regex.lastIndex) {
           regex.lastIndex++;

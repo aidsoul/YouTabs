@@ -154,19 +154,38 @@ function regexMatch(pattern, text, flags = 'i') {
     return { match: false, matches: [], error: null };
   }
   
+  const MAX_MATCHES = 1000;
+  const MAX_REGEX_TIME_MS = 2000; // 2 second timeout
+  const startTime = performance.now();
+  
   try {
     const regex = new RegExp(pattern, flags);
     const matches = [];
     let match;
+    let matchCount = 0;
     
-    // Find all matches
+    // Find all matches with limit
     while ((match = regex.exec(text)) !== null) {
+      // Check timeout
+      if (performance.now() - startTime > MAX_REGEX_TIME_MS) {
+        return { 
+          match: matches.length > 0, 
+          matches, 
+          error: 'Regex search timed out' 
+        };
+      }
+      
       matches.push({
         value: match[0],
         index: match.index,
         groups: match.slice(1),
         namedGroups: match.groups || {}
       });
+      
+      matchCount++;
+      if (matchCount >= MAX_MATCHES) {
+        break;
+      }
       
       // Prevent infinite loop for zero-width matches
       if (match.index === regex.lastIndex) {
@@ -196,6 +215,25 @@ function regexMatch(pattern, text, flags = 'i') {
 function validateRegexPattern(pattern) {
   if (!pattern) {
     return { valid: false, error: 'Pattern is empty' };
+  }
+  
+  // Check for potentially dangerous patterns that can cause catastrophic backtracking
+  const dangerousPatterns = [
+    { regex: /\(\.*\+\.*\)+/, message: 'Nested quantifiers can cause performance issues' },
+    { regex: /\(\.*\*\.*\)+/, message: 'Nested quantifiers can cause performance issues' },
+    { regex: /\(\s*\|\s*\)+\+/, message: 'Nested alternation can cause performance issues' },
+    { regex: /\.\*\.\*\.\*/, message: 'Multiple greedy quantifiers can cause performance issues' }
+  ];
+  
+  for (const { regex, message } of dangerousPatterns) {
+    if (regex.test(pattern)) {
+      return { valid: false, error: message };
+    }
+  }
+  
+  // Limit pattern length
+  if (pattern.length > 100) {
+    return { valid: false, error: 'Pattern is too long' };
   }
   
   try {

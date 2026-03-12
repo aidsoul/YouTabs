@@ -32,6 +32,9 @@ class YouTabsSidebar extends YouTabsCore {
         tabsScrollContainer: this.tabsScrollContainer,
         tabPreview: this.tabPreview
       });
+      
+      // Override onTabClick to save search query when clicking tabs
+      this.uiRenderer.options.onTabClick = (e, tab) => this.handleTabClick(e, tab);
     }
     this.searchClear = document.getElementById('searchClear');
     this.searchRegex = document.getElementById('searchRegex');
@@ -88,7 +91,7 @@ class YouTabsSidebar extends YouTabsCore {
           // Show tabs when input becomes empty (not history)
           this.isShowingHistory = false;
           this.clearSearch();
-          this.renderTabsList();
+          this.renderTabs();
         } else {
           // Hide history and search
           this.isShowingHistory = false;
@@ -114,7 +117,7 @@ class YouTabsSidebar extends YouTabsCore {
           const query = this.searchInput?.value.trim();
           if (!query) {
             this.isShowingHistory = false;
-            this.renderTabsList();
+            this.renderTabs();
           }
         }, 150);
       });
@@ -123,7 +126,7 @@ class YouTabsSidebar extends YouTabsCore {
         if (e.key === 'Escape') {
           if (this.isShowingHistory) {
             this.isShowingHistory = false;
-            this.renderTabsList();
+            this.renderTabs();
           } else {
             this.clearSearchInput();
           }
@@ -141,6 +144,12 @@ class YouTabsSidebar extends YouTabsCore {
           e.preventDefault();
           if (this.isShowingHistory) {
             this.selectHistoryItem();
+          } else {
+            // Save search query to history when pressing Enter
+            const query = this.searchInput?.value?.trim();
+            if (query) {
+              this.saveSearchQuery(query);
+            }
           }
         }
       });
