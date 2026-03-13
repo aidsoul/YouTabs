@@ -2262,6 +2262,16 @@ class UIRenderer {
       </span>`;
     }
     
+    // Get tags for this tab
+    let tagsHtml = '';
+    const pageTags = this.options.getPageTags ? this.options.getPageTags() : {};
+    const tags = pageTags[tabUrlKey] || [];
+    if (tags.length > 0) {
+      const tagsDisplay = tags.slice(0, 3).map(tag => `<span class="tab-tag">${this.escapeHtml(tag)}</span>`).join('');
+      const moreTags = tags.length > 3 ? `<span class="tab-tag-more">+${tags.length - 3}</span>` : '';
+      tagsHtml = `<div class="tab-tags" title="Tags: ${tags.join(', ')}">${tagsDisplay}${moreTags}</div>`;
+    }
+    
     if (settings.showFavicon) {
       if (tab.favIconUrl && this.isValidFaviconUrl(tab.favIconUrl)) {
         faviconHtml = `<img class="tab-favicon" src="${this.escapeHtml(tab.favIconUrl)}" alt="" />`;
@@ -2314,6 +2324,7 @@ class UIRenderer {
       <div class="tab-content">
         ${this.options.settings.showTabTitle !== false ? `<span class="tab-title" title="${this.escapeHtml(title)}">${this.escapeHtml(title)}</span>` : ''}
         ${groupNameHtml}
+        ${tagsHtml}
       </div>
       ${indexedIndicator}
       ${discardedIndicator}

@@ -193,6 +193,7 @@ class YouTabsCore {
       getSearchQuery: () => this.searchQuery,
       getCustomTabNames: () => this.customTabNames,
       getPageHeadings: () => this.pageHeadings,
+      getPageTags: () => this.pageTags,
       getCustomGroupForTab: (tabId) => this.getCustomGroupForTab(tabId),
       getGroupHierarchyNames: (tabId) => this.getGroupHierarchyNames(tabId),
       getGroupHierarchyNamesForGroup: (groupId) => this.getGroupHierarchyNamesForGroup(groupId),
@@ -367,6 +368,9 @@ class YouTabsCore {
     // Load page headings from storage (via SearchEngine)
     await this.searchEngine.loadPageHeadings();
     
+    // Load page tags from storage (via SearchEngine)
+    await this.searchEngine.loadPageTags();
+    
     // Load current window tabs
     await this.loadTabs();
     
@@ -479,6 +483,34 @@ class YouTabsCore {
     if (this.searchEngine) {
       this.searchEngine.pageHeadings = value;
     }
+  }
+  
+  get pageTags() {
+    return this.searchEngine ? this.searchEngine.pageTags : {};
+  }
+  
+  set pageTags(value) {
+    if (this.searchEngine) {
+      this.searchEngine.pageTags = value;
+    }
+  }
+  
+  // Get tags for a specific tab
+  getTagsForTab(tab) {
+    if (!tab || !tab.url) return [];
+    const urlKey = this.getUrlKey(tab.url);
+    return this.pageTags[urlKey] || [];
+  }
+  
+  // Set tags for a specific tab
+  async setTagsForTab(tab, tags) {
+    if (!tab || !tab.url) return;
+    await this.searchEngine.setTagsForUrl(tab.url, tags);
+  }
+  
+  // Get all unique tags
+  async getAllUniqueTags() {
+    return await this.searchEngine.getAllUniqueTags();
   }
   
   // Get a URL key for indexing - delegate to SearchEngine
@@ -880,6 +912,25 @@ class YouTabsCore {
       this.hideContextMenu();
     });
     menu.appendChild(renameItem);
+    
+    // Tags option
+    const tagsItem = document.createElement('div');
+    tagsItem.className = 'context-menu-item';
+    tagsItem.textContent = 'Tags';
+    tagsItem.addEventListener('click', async () => {
+      const tab = this.tabs.find(t => t.id === Number(tabId));
+      if (tab) {
+        const currentTags = this.getTagsForTab(tab);
+        const tagsInput = await this.showPrompt('Manage Tags', 'Enter tags (comma-separated):', currentTags.join(', '));
+        if (tagsInput !== null) {
+          const newTags = tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          await this.setTagsForTab(tab, newTags);
+          this.renderTabs();
+        }
+      }
+      this.hideContextMenu();
+    });
+    menu.appendChild(tagsItem);
     
     // Restore original name option (only if custom name exists)
     if (hasCustomName) {

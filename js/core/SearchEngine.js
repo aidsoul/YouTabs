@@ -49,6 +49,9 @@ class SearchEngine {
     // Indexed page headings for search
     this.pageHeadings = {}; // { urlKey: [{ id: string, text: string, level: number, url: string }] }
     
+    // Page tags for search and filtering
+    this.pageTags = {}; // { urlKey: [tag1, tag2, ...] }
+    
     // Mapping from tabId to urlKey for search
     this.tabIdToUrlKey = {}; // { tabId: urlKey }
     
@@ -489,6 +492,11 @@ class SearchEngine {
     
     const customTabNames = this.options.getCustomTabNames();
     
+    // Check if this is a tag search (starts with # or tag:)
+    const tagMatch = query.match(/^#(.+)$/) || query.match(/^tag:(.+)$/);
+    const isTagSearch = !!tagMatch;
+    const tagQuery = isTagSearch ? tagMatch[1].toLowerCase().trim() : null;
+    
     return tabs.filter(tab => {
       const title = (tab.title || '').toLowerCase();
       const url = (tab.url || '').toLowerCase();
@@ -500,6 +508,13 @@ class SearchEngine {
       // Get group and subgroup names for this tab
       const groupNames = this.options.getGroupHierarchyNames(tab.id);
       const groupNameSearch = groupNames.join(' ').toLowerCase();
+      
+      // If tag search, check if tab has the matching tag
+      if (isTagSearch) {
+        const urlKey = this.getUrlKey(tab.url);
+        const tabTags = this.pageTags[urlKey] || [];
+        return tabTags.some(tag => tag.toLowerCase().includes(tagQuery));
+      }
       
       return title.includes(query) || url.includes(query) || customTabName.includes(query) || groupNameSearch.includes(query);
     });
@@ -600,6 +615,18 @@ class SearchEngine {
       // Get group and subgroup names for this tab
       const groupNames = this.options.getGroupHierarchyNames(tab.id);
       const groupNameSearch = groupNames.join(' ');
+      
+      // Check if this is a tag search (starts with # or tag:)
+      const tagMatch = pattern.match(/^#(.+)$/) || pattern.match(/^tag:(.+)$/);
+      const isTagSearch = !!tagMatch;
+      const tagQuery = isTagSearch ? tagMatch[1].toLowerCase().trim() : null;
+      
+      // If tag search, check if tab has the matching tag
+      if (isTagSearch) {
+        const urlKey = this.getUrlKey(tab.url);
+        const tabTags = this.pageTags[urlKey] || [];
+        return tabTags.some(tag => tag.toLowerCase().includes(tagQuery));
+      }
       
       // Perform regex search on each field using pre-compiled regex
       if (matchWithRegex(title).match) return true;
@@ -1278,6 +1305,91 @@ class SearchEngine {
       }
     } catch (error) {
       console.error('SearchEngine: Error loading page headings:', error);
+    }
+  }
+  
+  /**
+   * Load page tags from IndexedDB
+   */
+  async loadPageTags() {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        await window.YouTabsDB.openDatabase();
+        
+        const allPageTags = await window.YouTabsDB.getAllPageTags();
+        this.pageTags = allPageTags || {};
+      }
+    } catch (error) {
+      console.error('SearchEngine: Error loading page tags:', error);
+    }
+  }
+  
+  /**
+   * Get tags for a specific URL
+   * @param {string} url - The URL to get tags for
+   * @returns {Array<string>} Array of tags
+   */
+  getTagsForUrl(url) {
+    const urlKey = this.getUrlKey(url);
+    return this.pageTags[urlKey] || [];
+  }
+  
+  /**
+   * Save tags for a URL
+   * @param {string} url - The URL to save tags for
+   * @param {Array<string>} tags - Array of tags
+   */
+  async setTagsForUrl(url, tags) {
+    const urlKey = this.getUrlKey(url);
+    
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        await window.YouTabsDB.savePageTags(urlKey, tags);
+        this.pageTags[urlKey] = tags.map(t => t.toLowerCase().trim()).filter(t => t.length > 0);
+        
+        // Invalidate search cache when tags change
+        this._cacheVersion++;
+        
+        // Re-run search if there's an active search query
+        if (this.searchQuery) {
+          this.setSearchQuery(this.searchQuery);
+        }
+      }
+    } catch (error) {
+      console.error('SearchEngine: Error saving page tags:', error);
+    }
+  }
+  
+  /**
+   * Get all unique tags
+   * @returns {Promise<Array<string>>}
+   */
+  async getAllUniqueTags() {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        return await window.YouTabsDB.getAllUniqueTags();
+      }
+      return [];
+    } catch (error) {
+      console.error('SearchEngine: Error getting all unique tags:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Search pages by tag
+   * @param {string} tag - Tag to search for
+   * @returns {Promise<Array<string>>} Array of URLs with matching tags
+   */
+  async searchPagesByTag(tag) {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        return await window.YouTabsDB.searchPagesByTag(tag);
+      }
+      return [];
+    } catch (error) {
+      console.error('SearchEngine: Error searching pages by tag:', error);
+      return [];
     }
   }
   

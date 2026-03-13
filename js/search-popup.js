@@ -117,6 +117,9 @@ async function init() {
     // Load indexed page headings from IndexedDB
     await searchEngine.loadPageHeadings();
 
+    // Load page tags from IndexedDB
+    await searchEngine.loadPageTags();
+
     // Load search history
     await loadSearchHistory();
 

@@ -49,6 +49,7 @@ class YouTabsSidebar extends YouTabsCore {
     this.filterHeadingsCount = document.getElementById('filterHeadingsCount');
     this.filterApplyBtn = document.getElementById('filterApplyBtn');
     this.filterResetBtn = document.getElementById('filterResetBtn');
+    this.filterTagInput = document.getElementById('filterTagInput');
     
     // Generate filter dropdown items dynamically if needed
     if (this.filterHeadingsMenu && this.filterHeadingsMenu.dataset.generated === 'true' && typeof YouTabsCore !== 'undefined') {
@@ -363,6 +364,22 @@ class YouTabsSidebar extends YouTabsCore {
       filterHeadingTypes: filterHeadingTypes
     });
     
+    // Handle tag filter - use as search query
+    if (this.filterTagInput && this.filterTagInput.value.trim()) {
+      const tagValue = this.filterTagInput.value.trim();
+      if (this.searchEngine) {
+        this.searchEngine.setSearchQuery('#' + tagValue);
+      }
+    } else {
+      // If no tag filter, clear the search if it was a tag search
+      const currentQuery = this.searchInput?.value?.trim() || '';
+      if (currentQuery.startsWith('#') || currentQuery.startsWith('tag:')) {
+        if (this.searchEngine) {
+          this.searchEngine.setSearchQuery('');
+        }
+      }
+    }
+    
     // Update filter button state
     this.updateFilterButtonState();
     
@@ -388,10 +405,17 @@ class YouTabsSidebar extends YouTabsCore {
     
     this.updateFilterHeadingsCount();
     
+    // Reset tag filter input
+    if (this.filterTagInput) {
+      this.filterTagInput.value = '';
+    }
+    
     // Apply reset to core filter
-    const core = this.getCore();
-    if (core && typeof core.resetFilter === 'function') {
-      core.resetFilter();
+    if (this.searchEngine && typeof this.searchEngine.applyFilter === 'function') {
+      this.searchEngine.applyFilter({
+        filterTabs: true,
+        filterHeadingTypes: this.searchEngine.filterHeadingTypes
+      });
     }
     
     // Update filter button state

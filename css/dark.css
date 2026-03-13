@@ -352,6 +352,20 @@ button:hover {
   color: #e0e0e0 !important;
 }
 
+/* Tab tags - Dark theme */
+.tab-tags {
+  gap: 4px;
+}
+
+.tab-tag {
+  background-color: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+.tab-tag-more {
+  color: #9ca3af !important;
+}
+
 /* Group count badge */
 .tab-group-count {
   background: #1a1a1a !important;

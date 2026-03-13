@@ -4,11 +4,12 @@
  */
 
 const DB_NAME = 'YouTabsDB';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 const STORE_CUSTOM_GROUPS = 'customGroups';
 const STORE_GROUP_TAB_METADATA = 'groupTabMetadata';
 const STORE_PAGES_INDEX = 'pagesIndex';
 const STORE_SEARCH_HISTORY = 'searchHistory';
+const STORE_PAGE_TAGS = 'pageTags';
 
 // Database instance
 let dbInstance = null;
@@ -70,6 +71,13 @@ function openDatabase() {
         // Add indexes for querying
         searchHistoryStore.createIndex('query', 'query', { unique: false });
         searchHistoryStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+      
+      // Create pageTags store for storing tags associated with pages/URLs
+      if (!db.objectStoreNames.contains(STORE_PAGE_TAGS)) {
+        const pageTagsStore = db.createObjectStore(STORE_PAGE_TAGS, { keyPath: 'url' });
+        // Add index on tags for efficient tag-based searching
+        pageTagsStore.createIndex('tags', 'tags', { unique: false, multiEntry: true });
       }
     };
   });
@@ -916,6 +924,170 @@ async function migrateFromYouTabsHeadings() {
   }
 }
 
+// ==================== Page Tags Functions ====================
+
+/**
+ * Save tags for a specific URL
+ * @param {string} url - The URL to save tags for
+ * @param {Array<string>} tags - Array of tag strings
+ * @returns {Promise<void>}
+ */
+async function savePageTags(url, tags) {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_PAGE_TAGS], 'readwrite');
+    const store = transaction.objectStore(STORE_PAGE_TAGS);
+    
+    // Normalize tags: lowercase and trim
+    const normalizedTags = (tags || []).map(tag => tag.toLowerCase().trim()).filter(tag => tag.length > 0);
+    
+    store.put({ url: url, tags: normalizedTags, updatedAt: Date.now() });
+
+    transaction.oncomplete = () => {
+      resolve();
+    };
+
+    transaction.onerror = () => {
+      console.error('IndexedDB: Failed to save page tags', transaction.error);
+      reject(transaction.error);
+    };
+  });
+}
+
+/**
+ * Get tags for a specific URL
+ * @param {string} url - The URL to get tags for
+ * @returns {Promise<Array<string>>}
+ */
+async function getPageTags(url) {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_PAGE_TAGS], 'readonly');
+    const store = transaction.objectStore(STORE_PAGE_TAGS);
+    const request = store.get(url);
+
+    request.onsuccess = () => {
+      resolve(request.result ? request.result.tags : []);
+    };
+
+    request.onerror = () => {
+      console.error('IndexedDB: Failed to get page tags', request.error);
+      reject(request.error);
+    };
+  });
+}
+
+/**
+ * Get all page tags (URL to tags mapping)
+ * @returns {Promise<Object>} - Object with url as keys and tags array as values
+ */
+async function getAllPageTags() {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_PAGE_TAGS], 'readonly');
+    const store = transaction.objectStore(STORE_PAGE_TAGS);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const results = request.result || [];
+      const pageTags = {};
+      for (const item of results) {
+        pageTags[item.url] = item.tags;
+      }
+      resolve(pageTags);
+    };
+
+    request.onerror = () => {
+      console.error('IndexedDB: Failed to get all page tags', request.error);
+      reject(request.error);
+    };
+  });
+}
+
+/**
+ * Get all unique tags
+ * @returns {Promise<Array<string>>}
+ */
+async function getAllUniqueTags() {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_PAGE_TAGS], 'readonly');
+    const store = transaction.objectStore(STORE_PAGE_TAGS);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const results = request.result || [];
+      const uniqueTags = new Set();
+      for (const item of results) {
+        for (const tag of (item.tags || [])) {
+          uniqueTags.add(tag);
+        }
+      }
+      resolve(Array.from(uniqueTags).sort());
+    };
+
+    request.onerror = () => {
+      console.error('IndexedDB: Failed to get all unique tags', request.error);
+      reject(request.error);
+    };
+  });
+}
+
+/**
+ * Search pages by tag
+ * @param {string} tag - Tag to search for
+ * @returns {Promise<Array<string>>} - Array of URLs with matching tags
+ */
+async function searchPagesByTag(tag) {
+  const db = await openDatabase();
+  const normalizedTag = tag.toLowerCase().trim();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_PAGE_TAGS], 'readonly');
+    const store = transaction.objectStore(STORE_PAGE_TAGS);
+    const index = store.index('tags');
+    const request = index.getAll(normalizedTag);
+
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.map(item => item.url));
+    };
+
+    request.onerror = () => {
+      console.error('IndexedDB: Failed to search pages by tag', request.error);
+      reject(request.error);
+    };
+  });
+}
+
+/**
+ * Delete tags for a specific URL
+ * @param {string} url - The URL to delete tags for
+ * @returns {Promise<void>}
+ */
+async function deletePageTags(url) {
+  const db = await openDatabase();
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_PAGE_TAGS], 'readwrite');
+    const store = transaction.objectStore(STORE_PAGE_TAGS);
+    store.delete(url);
+
+    transaction.oncomplete = () => {
+      resolve();
+    };
+
+    transaction.onerror = () => {
+      console.error('IndexedDB: Failed to delete page tags', transaction.error);
+      reject(transaction.error);
+    };
+  });
+}
+
 // Export functions for use in other modules
 if (typeof window !== 'undefined') {
   window.YouTabsDB = {
@@ -943,6 +1115,13 @@ if (typeof window !== 'undefined') {
     addSearchQuery,
     getSearchHistory,
     clearSearchHistory,
-    deleteSearchHistoryItem
+    deleteSearchHistoryItem,
+    // Page tags functions
+    savePageTags,
+    getPageTags,
+    getAllPageTags,
+    getAllUniqueTags,
+    searchPagesByTag,
+    deletePageTags
   };
 }
