@@ -291,9 +291,25 @@ async function handleUpdateIndex() {
     // Find a tab that matches the selected URL
     let matchingTab = null;
     for (const tab of tabs) {
-      if (tab.url && (tab.url === urlToUpdate || tab.url.startsWith(urlToUpdate) || urlToUpdate.startsWith(tab.url))) {
-        matchingTab = tab;
-        break;
+      if (tab.url) {
+        // Use URL normalization for proper comparison
+        try {
+          const tabUrlObj = new URL(tab.url);
+          const targetUrlObj = new URL(urlToUpdate);
+          const tabUrlKey = tabUrlObj.origin + tabUrlObj.pathname.replace(/\/$/, '');
+          const targetUrlKey = targetUrlObj.origin + targetUrlObj.pathname.replace(/\/$/, '');
+          
+          if (tabUrlKey === targetUrlKey) {
+            matchingTab = tab;
+            break;
+          }
+        } catch (e) {
+          // Fallback to string comparison if URL parsing fails
+          if (tab.url === urlToUpdate) {
+            matchingTab = tab;
+            break;
+          }
+        }
       }
     }
     
@@ -311,6 +327,9 @@ async function handleUpdateIndex() {
           }
         });
       });
+      
+      // Additional wait to ensure page content is fully rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Get the page content using the new scripting API
       const results = await browser.scripting.executeScript({
