@@ -263,6 +263,13 @@ async function deletePagesIndex(tabId) {
 async function deletePagesIndexByUrl(urlKey) {
   const db = await openDatabase();
   
+  // Use the URL key directly - it's already normalized when saved
+  // Just ensure it's not empty
+  if (!urlKey || typeof urlKey !== 'string') {
+    console.error('Invalid URL key for deletion:', urlKey);
+    return Promise.reject(new Error('Invalid URL key'));
+  }
+  
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_PAGES_INDEX], 'readwrite');
     const store = transaction.objectStore(STORE_PAGES_INDEX);

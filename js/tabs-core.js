@@ -2267,6 +2267,15 @@ class YouTabsCore {
       });
     }
     
+    const openIndexesBtn = document.getElementById('openIndexesBtn');
+    if (openIndexesBtn) {
+      openIndexesBtn.addEventListener('click', async () => {
+        // Open the indexes page in a new tab
+        const indexesUrl = browser.runtime.getURL('indexes.html');
+        await browser.tabs.create({ url: indexesUrl });
+      });
+    }
+    
     const indexAllBtn = document.getElementById('indexAllBtn');
     if (indexAllBtn) {
       indexAllBtn.addEventListener('click', async () => {
