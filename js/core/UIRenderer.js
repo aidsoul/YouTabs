@@ -2528,6 +2528,12 @@ class UIRenderer {
   showTabPreview(e, tab) {
     if (!this.tabPreview) return;
     
+    // Check if tab preview is enabled in settings
+    const settings = this.options.settings;
+    if (settings && settings.showTabPreview === false) {
+      return;
+    }
+    
     const title = tab.title || 'New tab';
     const url = tab.url || '';
     

@@ -2578,6 +2578,11 @@ class YouTabsCore {
   showTabPreview(e, tab) {
     if (!this.tabPreview) return;
     
+    // Check if tab preview is enabled in settings
+    if (this.settings && this.settings.showTabPreview === false) {
+      return;
+    }
+    
     const title = tab.title || 'New tab';
     const url = tab.url || '';
     
