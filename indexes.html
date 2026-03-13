@@ -38,6 +38,32 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 20px;
+      gap: 16px;
+    }
+    
+    .search-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .search-input {
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      font-size: 13px;
+      width: 250px;
+    }
+    
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent-color, #4a90d9);
+    }
+    
+    .search-input::placeholder {
+      color: var(--text-secondary);
     }
     
     .indexes-title {
@@ -135,12 +161,63 @@
       padding: 40px;
       color: var(--text-secondary);
     }
+    
+    .pagination-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      padding: 16px;
+      background: var(--bg-hover);
+      border-top: 1px solid var(--border-color);
+    }
+    
+    .pagination-btn {
+      padding: 6px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 150ms ease;
+    }
+    
+    .pagination-btn:hover:not(:disabled) {
+      background: var(--bg-hover);
+      border-color: var(--text-secondary);
+    }
+    
+    .pagination-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .pagination-btn.active {
+      background: var(--accent-color, #4a90d9);
+      border-color: var(--accent-color, #4a90d9);
+      color: white;
+    }
+    
+    .pagination-ellipsis {
+      color: var(--text-secondary);
+      padding: 0 4px;
+    }
+    
+    .pagination-info {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin-left: 8px;
+    }
   </style>
 </head>
 <body>
   <div class="indexes-container">
     <div class="indexes-header">
       <h1 class="indexes-title">Indexed Pages</h1>
+      <div class="search-container">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search by URL...">
+      </div>
       <button id="deleteAllBtn" class="action-btn" title="Delete all indexes">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -166,6 +243,7 @@
           </tr>
         </tbody>
       </table>
+      <div id="paginationContainer" class="pagination-container"></div>
     </div>
   </div>
   

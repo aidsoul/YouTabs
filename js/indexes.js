@@ -1,7 +1,13 @@
 // IndexedDB indexes management page script
 
 let indexesData = [];
+let filteredData = [];
 let selectedUrl = null;
+
+// Pagination
+const ITEMS_PER_PAGE = 50;
+let currentPage = 1;
+let totalPages = 1;
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -27,7 +33,26 @@ async function loadIndexes() {
     // Sort by indexedAt descending
     indexesData.sort((a, b) => b.indexedAt - a.indexedAt);
     
+    // Apply current search filter if any
+    const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+    if (searchTerm) {
+      filteredData = indexesData.filter(item => item.url.toLowerCase().includes(searchTerm));
+    } else {
+      filteredData = [...indexesData];
+    }
+    
+    // Initialize pagination
+    totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+    if (totalPages < 1) totalPages = 1;
+    
+    // Adjust current page if it's out of range after data change
+    if (currentPage > totalPages) {
+      currentPage = totalPages;
+    }
+    if (currentPage < 1) currentPage = 1;
+    
     renderTable();
+    renderPagination();
   } catch (error) {
     console.error('Failed to load indexes:', error);
     const tbody = document.getElementById('indexesTableBody');
@@ -39,13 +64,23 @@ async function loadIndexes() {
 function renderTable() {
   const tbody = document.getElementById('indexesTableBody');
   
-  if (indexesData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No indexed pages found</td></tr>';
+  if (filteredData.length === 0) {
+    const searchTerm = document.getElementById('searchInput').value.trim();
+    if (searchTerm) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No matching URLs found</td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No indexed pages found</td></tr>';
+    }
     return;
   }
   
-  tbody.innerHTML = indexesData.map((item, index) => `
-    <tr data-url="${item.url}" data-index="${index}">
+  // Calculate start and end indices for current page
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, filteredData.length);
+  const pageData = filteredData.slice(startIndex, endIndex);
+  
+  tbody.innerHTML = pageData.map((item, index) => `
+    <tr data-url="${item.url}" data-index="${startIndex + index}">
       <td class="indexes-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</td>
       <td>${item.headingsCount}</td>
       <td>${formatDate(item.indexedAt)}</td>
@@ -60,8 +95,79 @@ function renderTable() {
   });
 }
 
+// Render pagination controls
+function renderPagination() {
+  const paginationContainer = document.getElementById('paginationContainer');
+  
+  if (filteredData.length <= ITEMS_PER_PAGE) {
+    paginationContainer.innerHTML = '';
+    return;
+  }
+  
+  let paginationHtml = '';
+  
+  // Previous button
+  paginationHtml += `<button class="pagination-btn" id="prevPageBtn" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>`;
+  
+  // Page numbers
+  const maxVisiblePages = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  
+  if (endPage - startPage < maxVisiblePages - 1) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+  }
+  
+  if (startPage > 1) {
+    paginationHtml += `<button class="pagination-btn" data-page="1">1</button>`;
+    if (startPage > 2) {
+      paginationHtml += `<span class="pagination-ellipsis">...</span>`;
+    }
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    paginationHtml += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+  }
+  
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      paginationHtml += `<span class="pagination-ellipsis">...</span>`;
+    }
+    paginationHtml += `<button class="pagination-btn" data-page="${totalPages}">${totalPages}</button>`;
+  }
+  
+  // Next button
+  paginationHtml += `<button class="pagination-btn" id="nextPageBtn" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>`;
+  
+  // Info text
+  const startItem = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endItem = Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length);
+  paginationHtml += `<span class="pagination-info">${startItem}-${endItem} of ${filteredData.length}</span>`;
+  
+  paginationContainer.innerHTML = paginationHtml;
+  
+  // Add event listeners
+  document.getElementById('prevPageBtn').addEventListener('click', () => goToPage(currentPage - 1));
+  document.getElementById('nextPageBtn').addEventListener('click', () => goToPage(currentPage + 1));
+  
+  document.querySelectorAll('.pagination-btn[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => goToPage(parseInt(btn.dataset.page)));
+  });
+}
+
+// Go to specific page
+function goToPage(page) {
+  if (page < 1 || page > totalPages) return;
+  currentPage = page;
+  renderTable();
+  renderPagination();
+}
+
 // Setup event listeners
 function setupEventListeners() {
+  // Search input
+  document.getElementById('searchInput').addEventListener('input', handleSearch);
+  
   // Delete all button
   document.getElementById('deleteAllBtn').addEventListener('click', handleDeleteAll);
   
@@ -82,6 +188,28 @@ function setupEventListeners() {
   document.getElementById('contextMenu').addEventListener('click', (e) => {
     e.stopPropagation();
   });
+}
+
+// Handle search
+function handleSearch() {
+  const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+  
+  // Filter the data
+  if (searchTerm) {
+    filteredData = indexesData.filter(item => item.url.toLowerCase().includes(searchTerm));
+  } else {
+    filteredData = [...indexesData];
+  }
+  
+  // Reset to first page
+  currentPage = 1;
+  
+  // Update pagination
+  totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+  if (totalPages < 1) totalPages = 1;
+  
+  renderTable();
+  renderPagination();
 }
 
 // Handle context menu
