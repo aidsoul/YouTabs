@@ -310,7 +310,7 @@ async function getPagesIndexWithTimestamp() {
       const results = request.result || [];
       const pageIndex = {};
       for (const item of results) {
-        pageIndex[item.url] = { headings: item.headings, indexedAt: item.indexedAt };
+        pageIndex[item.url] = { headings: item.headings, indexedAt: item.indexedAt, lastIncrementalUpdate: item.lastIncrementalUpdate };
       }
       resolve(pageIndex);
     };
