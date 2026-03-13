@@ -2676,7 +2676,7 @@ class UIRenderer {
   formatUrl(url) {
     try {
       const urlObj = new URL(url);
-      return urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
+      return urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '') + urlObj.search;
     } catch {
       return url;
     }

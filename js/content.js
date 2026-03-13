@@ -1295,7 +1295,7 @@ function getUrlKey(url) {
     if (key.endsWith('/')) {
       key = key.slice(0, -1);
     }
-    return key;
+    return key + urlObj.search;
   } catch (e) {
     return url;
   }

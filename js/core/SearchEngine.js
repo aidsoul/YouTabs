@@ -1122,7 +1122,7 @@ class SearchEngine {
   getUrlKey(url) {
     try {
       const urlObj = new URL(url);
-      return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+      return urlObj.origin + urlObj.pathname.replace(/\/$/, '') + urlObj.search;
     } catch (e) {
       console.log('SearchEngine: getUrlKey failed to parse URL:', url, e);
       return url;

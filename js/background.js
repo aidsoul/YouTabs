@@ -627,7 +627,7 @@ async function handleAddTextToIndex(url, text) {
 function getUrlKey(url) {
   try {
     const urlObj = new URL(url);
-    return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+    return urlObj.origin + urlObj.pathname.replace(/\/$/, '') + urlObj.search;
   } catch (e) {
     console.log('getUrlKey: failed to parse URL:', url, e);
     return url;

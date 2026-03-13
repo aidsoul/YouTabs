@@ -296,8 +296,8 @@ async function handleUpdateIndex() {
         try {
           const tabUrlObj = new URL(tab.url);
           const targetUrlObj = new URL(urlToUpdate);
-          const tabUrlKey = tabUrlObj.origin + tabUrlObj.pathname.replace(/\/$/, '');
-          const targetUrlKey = targetUrlObj.origin + targetUrlObj.pathname.replace(/\/$/, '');
+          const tabUrlKey = tabUrlObj.origin + tabUrlObj.pathname.replace(/\/$/, '') + tabUrlObj.search;
+          const targetUrlKey = targetUrlObj.origin + targetUrlObj.pathname.replace(/\/$/, '') + targetUrlObj.search;
           
           if (tabUrlKey === targetUrlKey) {
             matchingTab = tab;

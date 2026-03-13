@@ -700,7 +700,7 @@ async function savePageHeadingsByUrl(url, tabId, headings, isIncremental = false
   let urlKey = url;
   try {
     const urlObj = new URL(url);
-    urlKey = urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+    urlKey = urlObj.origin + urlObj.pathname.replace(/\/$/, '') + urlObj.search;
   } catch (e) {
     // Use original URL if parsing fails
   }
