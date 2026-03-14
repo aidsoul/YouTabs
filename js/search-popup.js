@@ -613,25 +613,43 @@ function renderHeadingSearchResults(tabsToRender, headings) {
       
       try {
         if (tabId) {
-          // Activate existing tab
-          await browser.tabs.update(parseInt(tabId), { active: true });
-          const tab = await browser.tabs.get(parseInt(tabId));
-          await browser.windows.update(tab.windowId, { focused: true });
-          
-          // Send message to content script to scroll to heading
-          if (headingId) {
-            try {
-              await browser.tabs.sendMessage(parseInt(tabId), {
-                action: 'scrollToHeading',
-                headingId: headingId,
-                elementType: headingType,
-                searchQuery: searchQuery
-              });
-            } catch (e) {
-              console.debug('Could not scroll to heading:', e.message);
+          // Try to activate existing tab
+          try {
+            const tab = await browser.tabs.get(parseInt(tabId));
+            if (tab) {
+              await browser.tabs.update(parseInt(tabId), { active: true });
+              await browser.windows.update(tab.windowId, { focused: true });
+              
+              // Send message to content script to scroll to heading
+              if (headingId) {
+                try {
+                  await browser.tabs.sendMessage(parseInt(tabId), {
+                    action: 'scrollToHeading',
+                    headingId: headingId,
+                    elementType: headingType,
+                    searchQuery: searchQuery
+                  });
+                } catch (e) {
+                  console.debug('Could not scroll to heading:', e.message);
+                }
+              }
+              
+              // Save search query to history
+              if (searchQuery) {
+                saveSearchQuery(searchQuery);
+              }
+              
+              // Close popup
+              window.close();
+              return;
             }
+          } catch (tabError) {
+            // Tab no longer exists, fall through to open URL in new tab
+            console.debug('Tab no longer exists, opening URL in new tab:', tabError.message);
           }
-        } else if (url) {
+        }
+        
+        if (url) {
           // Open URL in new tab
           const newTab = await browser.tabs.create({ url: url, active: true });
           
@@ -710,23 +728,42 @@ async function openResultByElement(item) {
 
   try {
     if (tabId) {
-      // Activate existing tab
-      await browser.tabs.update(parseInt(tabId), { active: true });
-      const tab = await browser.tabs.get(parseInt(tabId));
-      await browser.windows.update(tab.windowId, { focused: true });
-    } else if (url) {
-      // Open URL
+      // Try to activate existing tab
+      try {
+        const tab = await browser.tabs.get(parseInt(tabId));
+        if (tab) {
+          await browser.tabs.update(parseInt(tabId), { active: true });
+          await browser.windows.update(tab.windowId, { focused: true });
+          
+          // Save search query to history
+          const query = searchInput?.value.trim();
+          if (query) {
+            saveSearchQuery(query);
+          }
+          
+          // Close popup
+          window.close();
+          return;
+        }
+      } catch (tabError) {
+        // Tab no longer exists, fall through to open URL in new tab
+        console.debug('Tab no longer exists, opening URL in new tab:', tabError.message);
+      }
+    }
+    
+    if (url) {
+      // Open URL in new tab
       await browser.tabs.create({ url: url, active: true });
+      
+      // Save search query to history
+      const query = searchInput?.value.trim();
+      if (query) {
+        saveSearchQuery(query);
+      }
+      
+      // Close popup
+      window.close();
     }
-
-    // Save search query to history
-    const query = searchInput?.value.trim();
-    if (query) {
-      saveSearchQuery(query);
-    }
-
-    // Close popup
-    window.close();
   } catch (error) {
     console.error('Error opening result:', error);
   }
