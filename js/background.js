@@ -42,6 +42,59 @@ browser.runtime.onStartup.addListener(() => {
   console.log('YouTabs extension started');
 });
 
+// Handle keyboard commands
+browser.commands.onCommand.addListener(async (command) => {
+  if (command === 'toggle-search') {
+    await openSearchPopup();
+  }
+});
+
+// Search popup state
+let searchPopupWindowId = null;
+
+// Open search popup window
+async function openSearchPopup() {
+  try {
+    // If popup already exists, focus it
+    if (searchPopupWindowId) {
+      try {
+        await browser.windows.update(searchPopupWindowId, { focused: true });
+        return;
+      } catch (e) {
+        // Window was closed, reset ID
+        searchPopupWindowId = null;
+      }
+    }
+    
+    // Get current window to position popup relative to it
+    const currentWindow = await browser.windows.getCurrent();
+    
+    // Create popup window for search
+    const popupWindow = await browser.windows.create({
+      url: 'search-popup.html',
+      type: 'popup',
+      width: POPUP_MAX_WIDTH,
+      height: 500,
+      left: Math.round(currentWindow.left + (currentWindow.width - POPUP_MAX_WIDTH) / 2),
+      top: Math.round(currentWindow.top + 100)
+    });
+    
+    searchPopupWindowId = popupWindow.id;
+    
+    // Listen for popup close
+    browser.windows.onRemoved.addListener(function onWindowRemoved(windowId) {
+      if (windowId === searchPopupWindowId) {
+        searchPopupWindowId = null;
+        browser.windows.onRemoved.removeListener(onWindowRemoved);
+      }
+    });
+    
+    console.log('YouTabs: Search popup opened');
+  } catch (error) {
+    console.error('YouTabs: Error opening search popup:', error);
+  }
+}
+
 // Handle messages from popup or other scripts
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'getTabs') {
@@ -574,9 +627,415 @@ async function handleAddTextToIndex(url, text) {
 function getUrlKey(url) {
   try {
     const urlObj = new URL(url);
-    return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+    return urlObj.origin + urlObj.pathname.replace(/\/$/, '') + urlObj.search;
   } catch (e) {
     console.log('getUrlKey: failed to parse URL:', url, e);
     return url;
   }
 }
+
+// ==================== Omnibox Search Functionality ====================
+
+// Initialize SearchEngine for omnibox
+let cachedTabs = [];
+let cachedCustomNames = {};
+let cachedGroupHierarchy = {};
+
+// Initialize SearchEngine for omnibox
+async function initOmniboxSearchEngine() {
+  if (window.omniboxSearchEngine) {
+    // Update cached tabs
+    cachedTabs = await browser.tabs.query({});
+    return window.omniboxSearchEngine;
+  }
+  
+  // Wait for DB to be ready
+  if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+    await window.YouTabsDB.openDatabase();
+  }
+  
+  // Get current tabs synchronously from cache
+  cachedTabs = await browser.tabs.query({});
+  
+  // Get and cache custom tab names
+  try {
+    const customGroups = await window.YouTabsDB.getCustomGroups();
+    for (const group of customGroups) {
+      if (group.tabs && Array.isArray(group.tabs)) {
+        for (const tabInfo of group.tabs) {
+          if (tabInfo.customName) {
+            cachedCustomNames[tabInfo.tabId] = { customName: tabInfo.customName };
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Omnibox: Could not get custom names', e);
+  }
+  
+  // Get and cache group hierarchy
+  try {
+    const groupTabMetadata = await window.YouTabsDB.getGroupTabMetadata();
+    if (groupTabMetadata && groupTabMetadata.groups) {
+      for (const [groupId, group] of Object.entries(groupTabMetadata.groups)) {
+        if (group.tabs && Array.isArray(group.tabs)) {
+          for (const tabId of group.tabs) {
+            if (!cachedGroupHierarchy[tabId]) {
+              cachedGroupHierarchy[tabId] = [];
+            }
+            cachedGroupHierarchy[tabId].push(group.name || '');
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Omnibox: Could not get group metadata', e);
+  }
+  
+  // Synchronous callbacks
+  const getTabs = () => cachedTabs;
+  const getCustomTabNames = () => cachedCustomNames;
+  const getGroupHierarchyNames = (tabId) => cachedGroupHierarchy[tabId] || [];
+  
+  window.omniboxSearchEngine = new SearchEngine({
+    settings: { enablePageSearch: true, maxSearchResults: 15 },
+    getTabs: getTabs,
+    getCustomTabNames: getCustomTabNames,
+    getGroupHierarchyNames: getGroupHierarchyNames,
+    onSearchResults: null,
+    onError: (error) => console.error('Omnibox SearchEngine error:', error)
+  });
+  
+  // Load page headings from IndexedDB
+  await window.omniboxSearchEngine.loadPageHeadings();
+  
+  return window.omniboxSearchEngine;
+}
+
+// Search using SearchEngine for omnibox
+async function searchIndexedData(query) {
+  try {
+    const searchEngine = await initOmniboxSearchEngine();
+    
+    // Perform search synchronously (no debounce)
+    await searchEngine._performSearch(query);
+    
+    // Get results
+    const tabs = searchEngine.getFilteredTabs();
+    const headings = searchEngine.getHeadingSearchResults();
+    
+    // Get open tabs for URL matching
+    const allTabs = await browser.tabs.query({});
+    
+    // Enrich tab results
+    const tabResults = tabs.map(tab => ({
+      type: 'tab',
+      url: tab.url,
+      title: tab.title,
+      tabId: tab.id,
+      windowId: tab.windowId,
+      score: 5,
+      isActive: tab.active
+    }));
+    
+    // Enrich heading results
+    const headingResults = headings.map(heading => {
+      // Check if tab is open
+      const matchingTab = allTabs.find(t => {
+        try {
+          const tUrl = t.url || '';
+          return tUrl.includes(heading.pageUrl) || heading.pageUrl.includes(tUrl);
+        } catch {
+          return false;
+        }
+      });
+      
+      let pageTitle = '';
+      try {
+        const urlObj = new URL(heading.pageUrl);
+        pageTitle = urlObj.hostname;
+      } catch (e) {
+        pageTitle = heading.pageUrl;
+      }
+      
+      return {
+        type: 'heading',
+        url: heading.url,
+        pageUrl: heading.pageUrl,
+        text: heading.text,
+        headingType: heading.type,
+        isTabOpen: !!matchingTab,
+        tabId: matchingTab ? matchingTab.id : null,
+        score: heading.relevance || 1,
+        pageTitle: pageTitle
+      };
+    });
+    
+    return {
+      tabs: tabResults,
+      headings: headingResults
+    };
+  } catch (error) {
+    console.error('Omnibox search error:', error);
+    return { tabs: [], headings: [] };
+  }
+}
+
+// Handle input changes - provide suggestions
+browser.omnibox.onInputChanged.addListener(async (query, suggestFn) => {
+
+  try {
+    const searchResults = await searchIndexedData(query);
+    const { tabs, headings } = searchResults;
+    
+    if (tabs.length === 0 && headings.length === 0) {
+      // No results found - don't show any suggestions
+      return;
+    }
+    
+    const suggestions = [];
+    
+    // Add tab results first (with higher priority)
+    for (const result of tabs) {
+      if (!result.url) continue;
+      
+      const title = result.title || result.url;
+      const description = `${title.substring(0, 60)}${title.length > 60 ? '...' : ''}`;
+      
+      suggestions.push({
+        content: result.url,
+        description: description
+      });
+    }
+    
+    // Add heading results
+    for (const result of headings) {
+      // Use pageUrl as fallback for url, and text or pageTitle for display
+      const url = result.url || result.pageUrl;
+      if (!url) continue;
+      
+      const displayText = result.text || result.pageTitle || 'Unknown';
+      const description = `${displayText.substring(0, 60)}${displayText.length > 60 ? '...' : ''} (${result.pageTitle || 'unknown'})`;
+      
+      suggestions.push({
+        content: result.pageUrl,
+        description: description
+      });
+    }
+    
+    suggestFn(suggestions);
+  } catch (error) {
+    console.error('Omnibox onInputChanged error:', error);
+    suggestFn([{
+      content: '',
+      description: 'Error searching: ' + error.message
+    }]);
+  }
+});
+
+// Handle user selection - navigate to URL
+browser.omnibox.onInputEntered.addListener(async (content, disposition) => {
+  if (!content) return;
+  
+  // Check if it's the default suggestion or not a URL - redirect to Google
+  if (content === 'Search YouTabs indexed pages...' || !content.startsWith('http')) {
+    browser.tabs.create({ url: 'https://www.google.com/search?q=' + encodeURIComponent(content) });
+    return;
+  }
+  
+  // Try to parse JSON content (new format with type info)
+  let url = content;
+  
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && parsed.url) {
+      url = parsed.url;
+    }
+  } catch (e) {
+    // Not JSON, treat as plain URL
+  }
+  
+  if (!url) return;
+  // Check if it's a valid URL
+  try {
+    // Check if there's an open tab with this URL
+    browser.tabs.query({ url: url }).then(tabs => {
+      if (tabs && tabs.length > 0) {
+        // Activate existing tab
+        if (disposition === 'currentTab') {
+          browser.tabs.update(tabs[0].id, { active: true });
+        } else {
+          browser.tabs.update(tabs[0].id, { active: true });
+          browser.windows.update(tabs[0].windowId, { focused: true });
+        }
+      } else {
+        // Open new tab
+        if (disposition === 'newForegroundTab') {
+          browser.tabs.create({ url: url, active: true });
+        } else if (disposition === 'newBackgroundTab') {
+          browser.tabs.create({ url: url, active: false });
+        } else {
+          browser.tabs.create({ url: url, active: true });
+        }
+      }
+    }).catch(error => {
+      console.error('Error handling omnibox input:', error);
+      // Fallback: just create a new tab
+      browser.tabs.create({ url: url, active: true });
+    });
+  } catch (e) {
+    console.error('Invalid URL from omnibox:', url, e);
+  }
+});
+
+// ============================================
+// Auto-Discard Inactive Tabs Functionality
+// ============================================
+
+// Track last active time for each tab
+const tabLastActiveTime = new Map();
+
+// Timer for auto-discard
+let autoDiscardTimer = null;
+
+/**
+ * Load auto-discard settings
+ */
+async function loadAutoDiscardSettings() {
+  try {
+    const stored = await browser.storage.local.get('settings');
+    const settings = stored.settings || {};
+    return {
+      enabled: settings.autoDiscardEnabled || false,
+      minutes: settings.autoDiscardMinutes || 5
+    };
+  } catch (error) {
+    console.error('Error loading auto-discard settings:', error);
+    return { enabled: false, minutes: 5 };
+  }
+}
+
+/**
+ * Discard inactive tabs that haven't been active for longer than the specified time
+ * Unloads inactive tabs from memory when they exceed the inactivity threshold
+ */
+async function discardInactiveTabs() {
+  try {
+    const { enabled, minutes } = await loadAutoDiscardSettings();
+    
+    if (!enabled || minutes <= 0) {
+      return;
+    }
+    
+    const now = Date.now();
+    const inactiveThresholdMs = minutes * 60 * 1000;
+    
+    // Get all tabs from all windows
+    const tabs = await browser.tabs.query({});
+    
+    let discardedCount = 0;
+    
+    for (const tab of tabs) {
+      // Skip active tab - keep it in memory
+      if (tab.active) {
+        tabLastActiveTime.set(tab.id, now);
+        continue;
+      }
+      
+      // Skip already discarded tabs
+      if (tab.discarded) {
+        continue;
+      }
+      
+      // Skip pinned tabs
+      if (tab.pinned) {
+        continue;
+      }
+      
+      // Check if tab has been inactive for longer than the threshold
+      const lastActive = tabLastActiveTime.get(tab.id) || now;
+      const inactiveDuration = now - lastActive;
+      
+      if (inactiveDuration >= inactiveThresholdMs) {
+        try {
+          await browser.tabs.discard(tab.id);
+          discardedCount++;
+          console.log(`YouTabs: Automatically discarded tab ${tab.id} (${tab.title}) - inactive for ${Math.round(inactiveDuration / 60000)} minutes`);
+        } catch (error) {
+          // Some tabs cannot be discarded (e.g., active tab, certain special tabs)
+          console.warn(`YouTabs: Could not discard tab ${tab.id}:`, error.message);
+        }
+      }
+    }
+    
+    // Log discarded tabs (silent operation - no notification)
+    if (discardedCount > 0) {
+      console.log(`YouTabs: Discarded ${discardedCount} tab(s) from memory`);
+    }
+  } catch (error) {
+    console.error('YouTabs: Error in discardInactiveTabs:', error);
+  }
+}
+
+/**
+ * Update the auto-discard timer based on settings
+ */
+async function updateAutoDiscardTimer() {
+  // Clear existing timer
+  if (autoDiscardTimer) {
+    clearInterval(autoDiscardTimer);
+    autoDiscardTimer = null;
+  }
+  
+  const { enabled, minutes } = await loadAutoDiscardSettings();
+  
+  if (enabled && minutes > 0) {
+    // Check every minute to be responsive, but only discard tabs that exceed threshold
+    autoDiscardTimer = setInterval(discardInactiveTabs, 60000);
+    console.log(`YouTabs: Auto-discard enabled - checking every minute (threshold: ${minutes} minute(s))`);
+    
+    // Also run immediately
+    discardInactiveTabs();
+  } else {
+    console.log('YouTabs: Auto-discard disabled');
+  }
+}
+
+/**
+ * Handle tab activation - update last active time
+ */
+browser.tabs.onActivated.addListener(async (activeInfo) => {
+  tabLastActiveTime.set(activeInfo.tabId, Date.now());
+});
+
+/**
+ * Handle tab updates - update last active time when tab is accessed
+ */
+browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' || changeInfo.title) {
+    tabLastActiveTime.set(tabId, Date.now());
+  }
+});
+
+/**
+ * Handle tab removal - clean up tracking
+ */
+browser.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  tabLastActiveTime.delete(tabId);
+});
+
+// Listen for storage changes to update timer
+browser.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.settings) {
+    const newSettings = changes.settings.newValue;
+    if (newSettings && (
+      typeof newSettings.autoDiscardEnabled !== 'undefined' ||
+      typeof newSettings.autoDiscardMinutes !== 'undefined'
+    )) {
+      updateAutoDiscardTimer();
+    }
+  }
+});
+
+// Initialize auto-discard on startup
+updateAutoDiscardTimer();

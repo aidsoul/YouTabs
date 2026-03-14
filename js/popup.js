@@ -32,6 +32,7 @@ class YouTabsPopup extends YouTabsCore {
     
     // Filter UI elements
     this.searchFilter = document.getElementById('searchFilter');
+    this.searchRegex = document.getElementById('searchRegex');
     this.filterModalOverlay = document.getElementById('filterModalOverlay');
     this.filterModalClose = document.getElementById('filterModalClose');
     this.filterTabs = document.getElementById('filterTabs');
@@ -40,6 +41,7 @@ class YouTabsPopup extends YouTabsCore {
     this.filterHeadingsCount = document.getElementById('filterHeadingsCount');
     this.filterApplyBtn = document.getElementById('filterApplyBtn');
     this.filterResetBtn = document.getElementById('filterResetBtn');
+    this.filterTagInput = document.getElementById('filterTagInput');
     
     // Generate filter dropdown items dynamically if needed
     if (this.filterHeadingsMenu && this.filterHeadingsMenu.dataset.generated === 'true' && typeof YouTabsCore !== 'undefined') {
@@ -131,6 +133,14 @@ class YouTabsPopup extends YouTabsCore {
       this.searchFilter.addEventListener('click', (e) => {
         e.stopPropagation();
         this.openFilterModal();
+      });
+    }
+    
+    // Regex toggle button click
+    if (this.searchRegex) {
+      this.searchRegex.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleRegexMode();
       });
     }
     
@@ -232,6 +242,43 @@ class YouTabsPopup extends YouTabsCore {
     }
   }
   
+  /**
+   * Toggle regex search mode
+   */
+  toggleRegexMode() {
+    if (!this.searchEngine) return;
+    
+    const currentMode = this.searchEngine.getRegexMode();
+    this.searchEngine.setRegexMode(!currentMode);
+    
+    // Update UI
+    if (this.searchRegex) {
+      this.searchRegex.classList.toggle('active', !currentMode);
+    }
+    
+    // Re-run search with new mode
+    if (this.searchInput && this.searchInput.value) {
+      this.setSearchQuery(this.searchInput.value);
+    }
+  }
+  
+  /**
+   * Update regex button state based on search results
+   * @param {Object} searchResults - Search results from SearchEngine
+   */
+  updateRegexButtonState(searchResults) {
+    if (!this.searchRegex) return;
+    
+    // Show error state if there's a regex error
+    if (searchResults.useRegex && searchResults.regexError) {
+      this.searchRegex.classList.add('error');
+      this.searchRegex.title = `Regex Error: ${searchResults.regexError}`;
+    } else {
+      this.searchRegex.classList.remove('error');
+      this.searchRegex.title = searchResults.useRegex ? 'Regex Search (.*) - ON' : 'Regex Search (.*)';
+    }
+  }
+  
   updateFilterHeadingsCount() {
     if (!this.filterHeadingsMenu || !this.filterHeadingsCount) return;
     
@@ -292,6 +339,22 @@ class YouTabsPopup extends YouTabsCore {
       filterHeadingTypes: filterHeadingTypes
     });
     
+    // Handle tag filter - use as search query
+    if (this.filterTagInput && this.filterTagInput.value.trim()) {
+      const tagValue = this.filterTagInput.value.trim();
+      if (this.core && this.core.searchEngine) {
+        this.core.searchEngine.setSearchQuery('#' + tagValue);
+      }
+    } else {
+      // If no tag filter, clear the search if it was a tag search
+      const currentQuery = this.searchInput?.value?.trim() || '';
+      if (currentQuery.startsWith('#') || currentQuery.startsWith('tag:')) {
+        if (this.core && this.core.searchEngine) {
+          this.core.searchEngine.setSearchQuery('');
+        }
+      }
+    }
+    
     // Update filter button state
     this.updateFilterButtonState();
     
@@ -317,10 +380,14 @@ class YouTabsPopup extends YouTabsCore {
     
     this.updateFilterHeadingsCount();
     
+    // Reset tag filter input
+    if (this.filterTagInput) {
+      this.filterTagInput.value = '';
+    }
+    
     // Apply reset to core filter
-    const core = this.getCore();
-    if (core && typeof core.resetFilter === 'function') {
-      core.resetFilter();
+    if (this.core && typeof this.core.resetFilter === 'function') {
+      this.core.resetFilter();
     }
     
     // Update filter button state

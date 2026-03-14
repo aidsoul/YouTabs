@@ -6,7 +6,7 @@
   <title>YouTabs</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
-<body style="min-width: 280px; width: 100%; max-width: 100vw; height: 100%; margin: 0; padding: 0;">
+<body>
   <div class="you-tabs-container">
     <div class="tabs-header">
       <div class="search-container">
@@ -20,6 +20,14 @@
             <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </button>
+        <button class="search-regex" id="searchRegex" aria-label="Toggle regex search" title="Regex Search (.*)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 3v10"/>
+            <path d="M12.67 5.5l8.66 5"/>
+            <path d="M12.67 10.5l8.66-5"/>
+            <path d="M9 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2z"/>
+          </svg>
+        </button>
         <button class="search-filter" id="searchFilter" title="Filter">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
@@ -28,6 +36,12 @@
       </div>
       <div class="tabs-actions">
         <span class="tab-count" id="tabCount">0</span>
+        <button class="action-btn" id="openIndexesBtn" title="Open indexes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+          </svg>
+        </button>
         <button class="settings-btn" id="settingsBtn" title="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
@@ -131,6 +145,10 @@
             </div>
           </div>
         </div>
+        <div class="filter-section">
+          <span class="filter-label">Filter by tag:</span>
+          <input type="text" id="filterTagInput" class="filter-tag-input" placeholder="Enter tag name...">
+        </div>
       </div>
       <div class="modal-footer">
         <button class="modal-btn modal-btn-cancel filter-reset-btn" id="filterResetBtn">Reset</button>
@@ -146,6 +164,8 @@
   <script src="js/core/GroupManager.js"></script>
   <script src="js/core/SearchEngine.js"></script>
   <script src="js/core/DragDropManager.js"></script>
+  <script src="js/utils/dom-utils.js"></script>
+  <script src="js/utils/search-utils.js"></script>
   <script src="js/core/UIRenderer.js"></script>
   <script src="js/tabs-core.js"></script>
   <script src="js/sidebar.js"></script>

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indexed Pages - YouTabs</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/dark.css">
+  <style>
+    :root {
+      /* Force dark theme colors */
+      --bg-inactive: #1e1e1e;
+      --bg-active: #252525;
+      --bg-hover: #2f2f2f;
+      --bg-dark-hover: #3a3a3a;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0a0;
+      --border-color: #404040;
+      --shadow-small: rgba(0, 0, 0, 0.3);
+      --shadow-medium: rgba(0, 0, 0, 0.4);
+    }
+    
+    body {
+      padding: 0;
+      overflow: auto;
+      background: var(--bg-active);
+      color: var(--text-primary);
+    }
+    
+    .indexes-container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .indexes-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 16px;
+    }
+    
+    .search-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .search-input {
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      font-size: 13px;
+      width: 250px;
+    }
+    
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent-color, #4a90d9);
+    }
+    
+    .search-input::placeholder {
+      color: var(--text-secondary);
+    }
+    
+    .indexes-title {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .indexes-table-container {
+      background: var(--bg-primary);
+      border-radius: 8px;
+      box-shadow: 0 2px 4px var(--shadow-small);
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+    
+    .indexes-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .indexes-table th,
+    .indexes-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+    
+    .indexes-table th {
+      background: var(--bg-hover);
+      font-weight: 600;
+    }
+    
+    .indexes-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .indexes-table tr:hover {
+      background: var(--bg-hover);
+    }
+    
+    .indexes-url {
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-secondary);
+    }
+    
+    .context-menu {
+      position: fixed;
+      z-index: 10000;
+      min-width: 160px;
+      max-width: calc(100vw - 40px);
+      background: var(--bg-active);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px var(--shadow-medium);
+      padding: 4px 0;
+      font-size: 13px;
+      overflow: visible;
+    }
+    
+    .context-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      color: var(--text-primary);
+      transition: background 100ms ease;
+    }
+    
+    .context-menu-item:hover {
+      background: var(--bg-hover);
+    }
+    
+    .context-menu-item.danger {
+      color: #f87171;
+    }
+    
+    .context-menu-item.danger:hover {
+      background: #3a2020;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+    
+    .pagination-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      padding: 16px;
+      background: var(--bg-hover);
+      border-top: 1px solid var(--border-color);
+    }
+    
+    .pagination-btn {
+      padding: 6px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-active);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 150ms ease;
+    }
+    
+    .pagination-btn:hover:not(:disabled) {
+      background: var(--bg-hover);
+      border-color: var(--text-secondary);
+    }
+    
+    .pagination-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .pagination-btn.active {
+      background: var(--accent-color, #4a90d9);
+      border-color: var(--accent-color, #4a90d9);
+      color: white;
+    }
+    
+    .pagination-ellipsis {
+      color: var(--text-secondary);
+      padding: 0 4px;
+    }
+    
+    .pagination-info {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="indexes-container">
+    <div class="indexes-header">
+      <h1 class="indexes-title">Indexed Pages</h1>
+      <div class="search-container">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search by URL...">
+      </div>
+      <button id="deleteAllBtn" class="action-btn" title="Delete all indexes">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+        </svg>
+      </button>
+    </div>
+    
+    <div class="indexes-table-container">
+      <table class="indexes-table">
+        <thead>
+          <tr>
+            <th>URL</th>
+            <th>Headings Count</th>
+            <th>Indexed At</th>
+            <th>Last Updated</th>
+          </tr>
+        </thead>
+        <tbody id="indexesTableBody">
+          <tr>
+            <td colspan="4" class="loading">Loading...</td>
+          </tr>
+        </tbody>
+      </table>
+      <div id="paginationContainer" class="pagination-container"></div>
+    </div>
+  </div>
+  
+  <!-- Context Menu -->
+  <div id="contextMenu" class="context-menu" style="display: none;">
+    <div id="updateIndexBtn" class="context-menu-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 4v6h-6M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      Update
+    </div>
+    <div id="deleteIndexBtn" class="context-menu-item danger">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+      </svg>
+      Delete
+    </div>
+  </div>
+  
+  <script src="js/db.js"></script>
+  <script src="js/indexes.js"></script>
+</body>
+</html>

@@ -5,7 +5,7 @@
 
 ## Changelog
 
-### v1.3.2 (Current Version)
+### v1.3.3 (Current Version)
 
 #### New Features
 
@@ -14,6 +14,12 @@
 - **Group Color Inheritance** — When moving tabs or groups to a new parent group, the color now automatically inherits from the new parent group. This creates a more consistent visual hierarchy and makes it easier to organize nested groups with unified color coding.
 
 - **Tab Usage Tracking** — The extension now tracks when each tab is activated and stores usage statistics. This enables future features like "recently used" sorting and smarter tab organization based on your browsing patterns.
+
+- **Omnibox Integration** — Type `yt` in the Firefox address bar followed by your search query to quickly find indexed page headings without opening the sidebar.
+
+- **Theme Support** — Choose between dark and light themes to customize the extension's appearance.
+
+- **Enhanced Drag & Drop** — Improved drag-and-drop functionality with better visual feedback, group nesting support, and color inheritance.
 
 #### Improvements
 
@@ -24,6 +30,8 @@
 - **Better Tab Preview Positioning** — Improved the tab preview positioning algorithm for better accuracy and visibility.
 
 - **Performance Optimizations** — Various internal optimizations to improve overall extension performance and reduce memory usage.
+
+- **On-Page Highlighting** — Search terms are now highlighted directly on pages when navigating to indexed results, with keyboard navigation between matches.
 
 ---
 
@@ -147,3 +155,101 @@ All data is stored locally using IndexedDB:
 - **Page Index** — Indexed content from visited pages including headings, paragraphs, links, and custom-added text
 
 No data is sent to external servers — everything stays on your device.
+
+## Keyboard Shortcuts
+
+YouTabs provides keyboard shortcuts for quick access to all major functions:
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+F` | Focus search input (in sidebar/popup) |
+| `Alt+F` | Open indexed search popup |
+| `Escape` | Close modals, clear search, remove highlights |
+| `Enter` | Confirm actions, select items |
+| `Arrow Up/Down` | Navigate through search results and highlights |
+| `Arrow Left/Right` | Navigate through page highlights |
+
+### Omnibox Integration
+
+You can also use YouTabs directly from the Firefox address bar:
+
+1. Type `yt` in the address bar and press `Space`
+2. Start typing your search query
+3. You'll see indexed page headings as suggestions
+4. Select a result to navigate directly to that page and heading
+
+## Theme Support
+
+YouTabs supports both dark and light themes to match your browser preferences:
+
+- **Dark Theme** — Easy on the eyes in low-light environments
+- **Light Theme** — Clean, bright interface for daytime use
+
+Theme can be changed in the extension settings. The theme applies to the sidebar, popup, and search interfaces.
+
+## Context Menu Integration
+
+YouTabs adds useful options to the browser context menu:
+
+- **Add to YouTabs Index** — Manually add selected text from any page to the search index
+- Quick access to tab management features
+
+## Drag and Drop
+
+YouTabs provides intuitive drag-and-drop functionality:
+
+- **Tab Reordering** — Drag tabs within a group to reorder them
+- **Move Between Groups** — Drag tabs between different groups
+- **Group Nesting** — Drag groups onto other groups to create nested hierarchies
+- **Visual Feedback** — Clear visual indicators show drop targets and positions
+- **Group Color Inheritance** — When moving tabs/groups, colors automatically inherit from parent groups
+
+## On-Page Text Highlighting
+
+When searching through indexed pages, YouTabs can highlight matching text directly on the page:
+
+- **Automatic Highlighting** — Search terms are highlighted on the page when navigating to results
+- **Navigation Controls** — Use arrow keys to jump between highlighted matches
+- **Match Counter** — See the total number of matches and current position
+- **Quick Dismiss** — Press `Escape` to clear all highlights
+
+## Notifications
+
+YouTabs displays system notifications for:
+
+- Successful indexing operations
+- Error alerts
+- Tab management actions
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Here's how you can help:
+
+1. **Fork the repository**
+2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+3. **Commit your changes** (`git commit -m 'Add some amazing feature'`)
+4. **Push to the branch** (`git push origin feature/amazing-feature`)
+5. **Open a Pull Request**
+
+### Development Setup
+
+To set up the development environment:
+
+1. Clone the repository
+2. Open Firefox and navigate to `about:debugging`
+3. Click "This Firefox" → "Load Temporary Add-on"
+4. Select the `manifest.json` file
+
+## Support
+
+- **Telegram Channel**: [YouTabs News & Updates](https://t.me/YouTabs_EXT)
+- **Firefox Add-ons**: [YouTabs on AMO](https://addons.mozilla.org/ru/firefox/addon/you-tabs/)
+- **GitHub Issues**: Report bugs and request features
+
+---
+
+Made with ❤️ by [AidSoul](https://github.com/AidSoul)

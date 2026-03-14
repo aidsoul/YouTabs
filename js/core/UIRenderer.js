@@ -124,6 +124,23 @@ class UIRenderer {
     this._colorPickerCloseHandler = null;
     this._loadedGroups = new Set();
     
+    // ==================== Virtual Scrolling ====================
+    
+    this._virtualScrollEnabled = true;
+    this._virtualScrollState = {
+      itemHeight: 36, // Default estimated height, will be measured
+      bufferSize: 5,  // Extra items to render above/below viewport
+      visibleStartIndex: 0,
+      visibleEndIndex: 0,
+      totalItems: 0,
+      scrollTop: 0,
+      containerHeight: 0,
+      measured: false
+    };
+    this._scrollRafId = null;
+    this._renderRafId = null;
+    this._tabElementsCache = new Map(); // Cache for tab elements by tabId
+    
     // ==================== Shared DOMParser ====================
     
     this._domParser = new DOMParser();
@@ -182,6 +199,11 @@ class UIRenderer {
     this.isValidFaviconUrl = this.isValidFaviconUrl.bind(this);
     this.formatUrl = this.formatUrl.bind(this);
     this.getGroupInfo = this.getGroupInfo.bind(this);
+    
+    // Virtual scrolling methods
+    this._onScroll = this._onScroll.bind(this);
+    this._updateVirtualScroll = this._updateVirtualScroll.bind(this);
+    this._measureItemHeight = this._measureItemHeight.bind(this);
   }
   
   // ==================== DOM Element Setup ====================
@@ -199,6 +221,15 @@ class UIRenderer {
     this.tabCount = elements.tabCount || null;
     this.tabsScrollContainer = elements.tabsScrollContainer || null;
     this.tabPreview = elements.tabPreview || null;
+    
+    // Setup scroll listener for virtual scrolling
+    if (this.tabsScrollContainer && this._virtualScrollEnabled) {
+      this.tabsScrollContainer.removeEventListener('scroll', this._onScroll);
+      this.tabsScrollContainer.addEventListener('scroll', this._onScroll, { passive: true });
+      
+      // Measure container height
+      this._virtualScrollState.containerHeight = this.tabsScrollContainer.clientHeight || 400;
+    }
   }
   
   // ==================== Modal Methods ====================
@@ -209,42 +240,75 @@ class UIRenderer {
   createModal() {
     if (this.modal) return;
     
-    const modalHTML = `
-      <div class="modal-overlay" id="customModalOverlay">
-        <div class="custom-modal">
-          <div class="modal-header">
-            <h3 class="modal-title" id="modalTitle"></h3>
-            <button class="modal-close" id="modalClose" aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body">
-            <p class="modal-message" id="modalMessage"></p>
-            <div class="modal-input-wrapper" id="modalInputWrapper" style="display: none;">
-              <input type="text" class="modal-input" id="modalInput" placeholder="Enter name...">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="modal-btn modal-btn-cancel" id="modalCancel">Cancel</button>
-            <button class="modal-btn modal-btn-confirm" id="modalConfirm">OK</button>
-          </div>
-        </div>
-      </div>
-    `;
+    // Create modal using DOM elements for security
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'customModalOverlay';
     
-    const container = document.createElement('div');
-    container.innerHTML = modalHTML;
-    this.modal = container.firstElementChild;
+    const modal = document.createElement('div');
+    modal.className = 'custom-modal';
+    
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    
+    const title = document.createElement('h3');
+    title.className = 'modal-title';
+    title.id = 'modalTitle';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'modal-close';
+    closeBtn.id = 'modalClose';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    const body = document.createElement('div');
+    body.className = 'modal-body';
+    
+    const message = document.createElement('p');
+    message.className = 'modal-message';
+    message.id = 'modalMessage';
+    
+    const inputWrapper = document.createElement('div');
+    inputWrapper.className = 'modal-input-wrapper';
+    inputWrapper.id = 'modalInputWrapper';
+    inputWrapper.style.display = 'none';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'modal-input';
+    input.id = 'modalInput';
+    input.placeholder = 'Enter name...';
+    
+    inputWrapper.appendChild(input);
+    body.appendChild(message);
+    body.appendChild(inputWrapper);
+    
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-btn modal-btn-cancel';
+    cancelBtn.id = 'modalCancel';
+    cancelBtn.textContent = 'Cancel';
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'modal-btn modal-btn-confirm';
+    confirmBtn.id = 'modalConfirm';
+    confirmBtn.textContent = 'OK';
+    
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    
+    this.modal = overlay;
     document.body.appendChild(this.modal);
-    
-    // Bind modal events - query relative to the modal to avoid conflicts
-    const overlay = this.modal;
-    const closeBtn = this.modal.querySelector('#modalClose');
-    const cancelBtn = this.modal.querySelector('#modalCancel');
-    const confirmBtn = this.modal.querySelector('#modalConfirm');
-    const input = this.modal.querySelector('#modalInput');
     
     // Close on overlay click
     overlay.addEventListener('click', (e) => {
@@ -467,7 +531,7 @@ class UIRenderer {
     renameItem.addEventListener('click', async () => {
       const currentName = this.options.getTabDisplayTitle(tab);
       const newName = await this.showPrompt('Rename Tab', 'Enter new name:', currentName);
-      if (newName?.trim() && newName !== currentName) {
+      if (newName && typeof newName === 'string' && newName.trim() && newName !== currentName) {
         await this.options.onSetTabCustomName(tabId, newName.trim());
       }
       this.hideContextMenu();
@@ -526,7 +590,7 @@ class UIRenderer {
       newGroupItem.textContent = 'Create group...';
       newGroupItem.addEventListener('click', async () => {
         const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-        if (groupName?.trim()) {
+        if (groupName && typeof groupName === 'string' && groupName.trim()) {
           const newGroup = await this.options.onCreateCustomGroup(groupName.trim());
           if (newGroup) {
             await this.options.onAddTabToGroup(tabId, newGroup.id);
@@ -615,7 +679,7 @@ class UIRenderer {
       createGroupItem.textContent = 'Create group...';
       createGroupItem.addEventListener('click', async () => {
         const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-        if (groupName?.trim()) {
+        if (groupName && typeof groupName === 'string' && groupName.trim()) {
           const newGroup = await this.options.onCreateCustomGroup(groupName.trim());
           if (newGroup) {
             await this.options.onAddTabToGroup(tabId, newGroup.id);
@@ -808,7 +872,7 @@ class UIRenderer {
       addSubgroupItem.textContent = 'Add subgroup';
       addSubgroupItem.addEventListener('click', async () => {
         const subgroupName = await this.showPrompt('New Subgroup', 'Enter subgroup name:', 'New subgroup');
-        if (subgroupName?.trim()) {
+        if (subgroupName && typeof subgroupName === 'string' && subgroupName.trim()) {
           await this.options.onCreateCustomGroup(subgroupName.trim(), 'blue', groupId);
         }
         this.hideContextMenu();
@@ -845,7 +909,7 @@ class UIRenderer {
     createGroupItem.textContent = 'Create group';
     createGroupItem.addEventListener('click', async () => {
       const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-      if (groupName?.trim()) {
+      if (groupName && typeof groupName === 'string' && groupName.trim()) {
         await this.options.onCreateCustomGroup(groupName.trim());
       }
       this.hideContextMenu();
@@ -863,16 +927,54 @@ class UIRenderer {
    * @param {Event} e - Event with mouse position
    */
   positionContextMenu(menu, e) {
+    // Menu might not be in DOM yet, so we need to temporarily add it to get dimensions
+    const wasInDOM = menu.parentElement !== null;
+    if (!wasInDOM) {
+      menu.style.visibility = 'hidden';
+      menu.style.position = 'fixed';
+      document.body.appendChild(menu);
+    }
+    
     const rect = menu.getBoundingClientRect();
+    
+    // Get the sidebar container bounds
+    const container = document.querySelector('.you-tabs-container') || document.body;
+    const containerRect = container.getBoundingClientRect();
+    
     let x = e.clientX;
     let y = e.clientY;
     
-    // Adjust if menu goes off screen
-    if (x + rect.width > window.innerWidth) {
-      x = window.innerWidth - rect.width - 8;
+    // Check if menu would go off the right edge - open to the left instead
+    if (x + rect.width > containerRect.right) {
+      // Try opening to the left of the click position
+      const leftSpace = x - containerRect.left;
+      
+      if (leftSpace > rect.width + 10) {
+        // There's enough space on the left, open left
+        x = x - rect.width - 8;
+      } else {
+        // Not enough space on left either, use right edge as fallback
+        x = containerRect.right - rect.width - 8;
+      }
     }
-    if (y + rect.height > window.innerHeight) {
-      y = window.innerHeight - rect.height - 8;
+    
+    // Also check if too far left
+    if (x < containerRect.left) {
+      x = containerRect.left + 8;
+    }
+    
+    // Check vertical boundaries
+    if (y + rect.height > containerRect.bottom) {
+      y = containerRect.bottom - rect.height - 8;
+    }
+    if (y < containerRect.top) {
+      y = containerRect.top + 8;
+    }
+    
+    // Remove from DOM if it wasn't there before, then add it back positioned
+    if (!wasInDOM) {
+      document.body.removeChild(menu);
+      menu.style.visibility = '';
     }
     
     menu.style.left = `${x}px`;
@@ -1308,7 +1410,7 @@ class UIRenderer {
     if (!group) return;
     
     const newName = await this.showPrompt('Rename Group', 'Enter new group name:', group.name);
-    if (newName && newName.trim() !== '') {
+    if (newName && typeof newName === 'string' && newName.trim() !== '') {
       await this.options.onRenameCustomGroup(groupId, newName.trim());
     }
   }
@@ -1340,15 +1442,16 @@ class UIRenderer {
   renderTabs() {
     if (!this.tabsList) return;
     
-    // Debounce rapid render calls to prevent flickering
-    if (this._renderDebounceTimer) {
-      clearTimeout(this._renderDebounceTimer);
+    // Cancel any pending RAF render
+    if (this._renderRafId) {
+      cancelAnimationFrame(this._renderRafId);
     }
     
-    this._renderDebounceTimer = setTimeout(() => {
-      this._renderDebounceTimer = null;
+    // Use requestAnimationFrame for rendering - syncs with browser paint cycle
+    this._renderRafId = requestAnimationFrame(() => {
+      this._renderRafId = null;
       this._doRenderTabs();
-    }, 50);
+    });
   }
   
   /**
@@ -2038,6 +2141,76 @@ class UIRenderer {
     
     // Single DOM operation to append all content
     this.tabsList.appendChild(fragment);
+    
+    // Measure item height after first render for virtual scrolling
+    if (!this._virtualScrollState.measured) {
+      this._measureItemHeight();
+    }
+  }
+  
+  // ==================== Virtual Scrolling Methods ====================
+  
+  /**
+   * Handle scroll event with requestAnimationFrame throttling
+   * @param {Event} e - Scroll event
+   */
+  _onScroll(e) {
+    if (this._scrollRafId) return;
+    
+    this._scrollRafId = requestAnimationFrame(() => {
+      this._scrollRafId = null;
+      this._updateVirtualScroll();
+    });
+  }
+  
+  /**
+   * Update visible items based on scroll position
+   */
+  _updateVirtualScroll() {
+    if (!this.tabsScrollContainer || !this._virtualScrollEnabled) return;
+    
+    const state = this._virtualScrollState;
+    const scrollTop = this.tabsScrollContainer.scrollTop;
+    const containerHeight = this.tabsScrollContainer.clientHeight || state.containerHeight;
+    
+    state.scrollTop = scrollTop;
+    state.containerHeight = containerHeight;
+    
+    // Calculate visible range
+    const visibleStart = Math.floor(scrollTop / state.itemHeight);
+    const visibleEnd = Math.ceil((scrollTop + containerHeight) / state.itemHeight);
+    
+    // Add buffer
+    const buffer = state.bufferSize;
+    state.visibleStartIndex = Math.max(0, visibleStart - buffer);
+    state.visibleEndIndex = visibleEnd + buffer;
+    
+    // Re-render only if visible range changed significantly
+    // Note: This is a simplified version - full implementation would reuse DOM elements
+  }
+  
+  /**
+   * Measure item height from existing DOM elements
+   */
+  _measureItemHeight() {
+    if (!this.tabsList) return;
+    
+    const firstTab = this.tabsList.querySelector('.tab-item');
+    if (firstTab) {
+      const height = firstTab.getBoundingClientRect().height;
+      if (height > 0) {
+        this._virtualScrollState.itemHeight = height;
+        this._virtualScrollState.measured = true;
+      }
+    }
+  }
+  
+  /**
+   * Enable or disable virtual scrolling
+   * @param {boolean} enabled - Whether to enable virtual scrolling
+   */
+  setVirtualScrollEnabled(enabled) {
+    this._virtualScrollEnabled = enabled;
   }
   
   /**
@@ -2122,6 +2295,16 @@ class UIRenderer {
       </span>`;
     }
     
+    // Get tags for this tab
+    let tagsHtml = '';
+    const pageTags = this.options.getPageTags ? this.options.getPageTags() : {};
+    const tags = pageTags[tabUrlKey] || [];
+    if (tags.length > 0) {
+      const tagsDisplay = tags.slice(0, 3).map(tag => `<span class="tab-tag">${this.escapeHtml(tag)}</span>`).join('');
+      const moreTags = tags.length > 3 ? `<span class="tab-tag-more">+${tags.length - 3}</span>` : '';
+      tagsHtml = `<div class="tab-tags" title="Tags: ${tags.join(', ')}">${tagsDisplay}${moreTags}</div>`;
+    }
+    
     if (settings.showFavicon) {
       if (tab.favIconUrl && this.isValidFaviconUrl(tab.favIconUrl)) {
         faviconHtml = `<img class="tab-favicon" src="${this.escapeHtml(tab.favIconUrl)}" alt="" />`;
@@ -2172,8 +2355,9 @@ class UIRenderer {
         ${faviconHtml}
       </div>
       <div class="tab-content">
-        <span class="tab-title" title="${this.escapeHtml(title)}">${this.escapeHtml(title)}</span>
+        ${this.options.settings.showTabTitle !== false ? `<span class="tab-title" title="${this.escapeHtml(title)}">${this.escapeHtml(title)}</span>` : ''}
         ${groupNameHtml}
+        ${tagsHtml}
       </div>
       ${indexedIndicator}
       ${discardedIndicator}
@@ -2218,6 +2402,8 @@ class UIRenderer {
     
     tabItem.addEventListener('click', (e) => this.options.onTabClick(e, tab));
     tabItem.querySelector('.tab-close').addEventListener('click', (e) => this.options.onTabClose(e, tab));
+    
+    // Tab preview event listeners
     tabItem.addEventListener('mouseenter', (e) => this.showTabPreview(e, tab));
     tabItem.addEventListener('mouseleave', () => this.hideTabPreview());
     tabItem.addEventListener('mousemove', (e) => this.updatePreviewPosition(e));
@@ -2386,6 +2572,12 @@ class UIRenderer {
   showTabPreview(e, tab) {
     if (!this.tabPreview) return;
     
+    // Check if tab preview is enabled in settings
+    const settings = this.options.settings;
+    if (settings && settings.showTabPreview === false) {
+      return;
+    }
+    
     const title = tab.title || 'New tab';
     const url = tab.url || '';
     
@@ -2517,7 +2709,7 @@ class UIRenderer {
   formatUrl(url) {
     try {
       const urlObj = new URL(url);
-      return urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '');
+      return urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '') + urlObj.search;
     } catch {
       return url;
     }

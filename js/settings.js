@@ -35,6 +35,9 @@ let isSearchActive = false;
 async function initSettings() {
   const settings = await loadSettings();
   
+  // Apply theme first
+  await applyTheme(settings.theme);
+  
   // Apply settings to toggles and selects
   Object.keys(settings).forEach(key => {
     const element = document.getElementById(key);
@@ -79,6 +82,11 @@ async function initSettings() {
       const setting = select.dataset.setting;
       const value = select.value;
       
+      // If theme setting, apply immediately
+      if (setting === 'theme') {
+        await applyTheme(value);
+      }
+      
       // Update settings
       const currentSettings = await loadSettings();
       currentSettings[setting] = value;
@@ -115,6 +123,22 @@ async function initSettings() {
   
   // Initialize reset button
   initResetButton();
+}
+
+// Apply theme to the page
+async function applyTheme(theme) {
+  // Remove existing theme link if present
+  const existingThemeLink = document.getElementById('theme-css');
+  if (existingThemeLink) {
+    existingThemeLink.remove();
+  }
+  
+  // Create and add new theme link
+  const themeLink = document.createElement('link');
+  themeLink.id = 'theme-css';
+  themeLink.rel = 'stylesheet';
+  themeLink.href = `css/${theme}.css`;
+  document.head.appendChild(themeLink);
 }
 
 // Initialize category navigation
@@ -288,8 +312,8 @@ function performSearch(query) {
   } else {
     noResultsMessage.style.display = 'none';
     
-    // Build search results HTML
-    let resultsHTML = '';
+    // Build search results using DOM methods
+    searchResultsContainer.innerHTML = '';
     
     foundItems.forEach(item => {
       const originalItem = item.element;
@@ -299,32 +323,49 @@ function performSearch(query) {
       const input = originalItem.querySelector('.settings-input');
       const inputGroup = originalItem.querySelector('.settings-input-group');
       
-      // Highlight matching text
-      const highlightedLabel = highlightText(label, query);
-      const highlightedDescription = highlightText(description, query);
+      // Create settings item container
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'settings-item';
+      itemDiv.dataset.keywords = originalItem.dataset.keywords || '';
       
-      let controlHTML = '';
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'settings-item-content';
+      
+      // Create label with highlighting
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'settings-label';
+      labelDiv.appendChild(highlightTextDOM(label, query));
+      contentDiv.appendChild(labelDiv);
+      
+      // Create description with highlighting
+      const descDiv = document.createElement('div');
+      descDiv.className = 'settings-description';
+      descDiv.appendChild(highlightTextDOM(description, query));
+      contentDiv.appendChild(descDiv);
+      
+      itemDiv.appendChild(contentDiv);
+      
+      // Add control element
       if (toggle) {
-        const isActive = toggle.classList.contains('active') ? 'active' : '';
-        controlHTML = `<div class="toggle-switch ${isActive}" data-setting="${toggle.dataset.setting}"></div>`;
+        const toggleDiv = document.createElement('div');
+        toggleDiv.className = `toggle-switch ${toggle.classList.contains('active') ? 'active' : ''}`;
+        toggleDiv.dataset.setting = toggle.dataset.setting;
+        itemDiv.appendChild(toggleDiv);
       } else if (input) {
-        controlHTML = `<input type="number" class="settings-input settings-input-small" data-setting="${input.dataset.setting}" min="${input.min}" max="${input.max}" value="${input.value}">`;
+        const inputEl = document.createElement('input');
+        inputEl.type = 'number';
+        inputEl.className = 'settings-input settings-input-small';
+        inputEl.dataset.setting = input.dataset.setting;
+        inputEl.min = input.min;
+        inputEl.max = input.max;
+        inputEl.value = input.value;
+        itemDiv.appendChild(inputEl);
       } else if (inputGroup) {
-        controlHTML = inputGroup.outerHTML;
+        itemDiv.appendChild(inputGroup.cloneNode(true));
       }
       
-      resultsHTML += `
-        <div class="settings-item" data-keywords="${originalItem.dataset.keywords || ''}">
-          <div class="settings-item-content">
-            <div class="settings-label">${highlightedLabel}</div>
-            <div class="settings-description">${highlightedDescription}</div>
-          </div>
-          ${controlHTML}
-        </div>
-      `;
+      searchResultsContainer.appendChild(itemDiv);
     });
-    
-    searchResultsContainer.innerHTML = resultsHTML;
     
     // Add event listeners to the cloned toggles
     searchResultsContainer.querySelectorAll('.toggle-switch').forEach(toggle => {
@@ -422,8 +463,60 @@ function calculateRelevance(query, keywords, label, description) {
 function highlightText(text, query) {
   if (!query || !text) return text;
   
+  // Local fallback escapeHtml function
+  const localEscapeHtml = (txt) => {
+    if (!txt) return '';
+    const div = document.createElement('div');
+    div.textContent = txt;
+    return div.innerHTML;
+  };
+  
+  // First escape HTML to prevent XSS
+  const escapeHtml = window.DOMUtils ? window.DOMUtils.escapeHtml : localEscapeHtml;
+  const escapedText = escapeHtml(text);
+
   const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
-  return text.replace(regex, '<mark style="background: rgba(73, 230, 11, 0.25); padding: 0 2px; border-radius: 2px;">$1</mark>');
+  return escapedText.replace(regex, '<mark style="background: rgba(73, 230, 11, 0.25); padding: 0 2px; border-radius: 2px;">$1</mark>');
+}
+
+// Highlight matching text using DOM (for safer innerHTML-free rendering)
+function highlightTextDOM(text, query) {
+  if (!query || !text) {
+    const span = document.createElement('span');
+    span.textContent = text || '';
+    return span;
+  }
+  
+  const fragment = document.createDocumentFragment();
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  let lastIndex = 0;
+  let index = lowerText.indexOf(lowerQuery);
+  
+  while (index !== -1) {
+    // Add text before match
+    if (index > lastIndex) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex, index)));
+    }
+    
+    // Add highlighted match
+    const mark = document.createElement('mark');
+    mark.style.background = 'rgba(73, 230, 11, 0.25)';
+    mark.style.padding = '0 2px';
+    mark.style.borderRadius = '2px';
+    mark.textContent = text.slice(index, index + query.length);
+    fragment.appendChild(mark);
+    
+    lastIndex = index + query.length;
+    index = lowerText.indexOf(lowerQuery, lastIndex);
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+  
+  return fragment;
 }
 
 // Escape regex special characters

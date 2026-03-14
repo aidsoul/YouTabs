@@ -11,6 +11,11 @@ class YouTabsSidebar extends YouTabsCore {
       shouldCloseWindow: false
     });
     
+    // Search history state
+    this.searchHistory = [];
+    this.isShowingHistory = false;
+    this.historySelectedIndex = -1;
+    
     // Initialize DOM elements
     this.tabsList = document.getElementById('tabsList');
     this.tabCount = document.getElementById('tabCount');
@@ -27,8 +32,12 @@ class YouTabsSidebar extends YouTabsCore {
         tabsScrollContainer: this.tabsScrollContainer,
         tabPreview: this.tabPreview
       });
+      
+      // Override onTabClick to save search query when clicking tabs
+      this.uiRenderer.options.onTabClick = (e, tab) => this.handleTabClick(e, tab);
     }
     this.searchClear = document.getElementById('searchClear');
+    this.searchRegex = document.getElementById('searchRegex');
     
     // Filter UI elements
     this.searchFilter = document.getElementById('searchFilter');
@@ -40,6 +49,7 @@ class YouTabsSidebar extends YouTabsCore {
     this.filterHeadingsCount = document.getElementById('filterHeadingsCount');
     this.filterApplyBtn = document.getElementById('filterApplyBtn');
     this.filterResetBtn = document.getElementById('filterResetBtn');
+    this.filterTagInput = document.getElementById('filterTagInput');
     
     // Generate filter dropdown items dynamically if needed
     if (this.filterHeadingsMenu && this.filterHeadingsMenu.dataset.generated === 'true' && typeof YouTabsCore !== 'undefined') {
@@ -76,13 +86,72 @@ class YouTabsSidebar extends YouTabsCore {
     // Search functionality
     if (this.searchInput) {
       this.searchInput.addEventListener('input', (e) => {
-        this.setSearchQuery(e.target.value);
+        const query = e.target.value.trim();
+        
+        if (!query) {
+          // Show tabs when input becomes empty (not history)
+          this.isShowingHistory = false;
+          this.clearSearch();
+          this.renderTabs();
+        } else {
+          // Hide history and search
+          this.isShowingHistory = false;
+          this.setSearchQuery(query);
+        }
         this.updateSearchClearButton();
+      });
+      
+      this.searchInput.addEventListener('focus', (e) => {
+        const query = e.target.value.trim();
+        
+        if (!query) {
+          this.loadSearchHistory().then(() => {
+            this.renderSearchHistory();
+          });
+        }
+      });
+      
+      // Show tabs when input loses focus
+      this.searchInput.addEventListener('blur', () => {
+        // Small delay to allow button clicks to register first
+        setTimeout(() => {
+          const query = this.searchInput?.value.trim();
+          if (!query) {
+            this.isShowingHistory = false;
+            this.renderTabs();
+          }
+        }, 150);
       });
       
       this.searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-          this.clearSearchInput();
+          if (this.isShowingHistory) {
+            this.isShowingHistory = false;
+            this.renderTabs();
+          } else {
+            this.clearSearchInput();
+          }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (this.isShowingHistory) {
+            this.navigateHistory(1);
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (this.isShowingHistory) {
+            this.navigateHistory(-1);
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (this.isShowingHistory) {
+            this.selectHistoryItem();
+          } else {
+            // Save search query to history when pressing Enter
+            const query = this.searchInput?.value?.trim();
+            if (query) {
+              this.saveSearchQuery(query);
+            }
+          }
         }
       });
     }
@@ -126,6 +195,14 @@ class YouTabsSidebar extends YouTabsCore {
       this.searchFilter.addEventListener('click', (e) => {
         e.stopPropagation();
         this.openFilterModal();
+      });
+    }
+    
+    // Regex toggle button click
+    if (this.searchRegex) {
+      this.searchRegex.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleRegexMode();
       });
     }
     
@@ -287,6 +364,22 @@ class YouTabsSidebar extends YouTabsCore {
       filterHeadingTypes: filterHeadingTypes
     });
     
+    // Handle tag filter - use as search query
+    if (this.filterTagInput && this.filterTagInput.value.trim()) {
+      const tagValue = this.filterTagInput.value.trim();
+      if (this.searchEngine) {
+        this.searchEngine.setSearchQuery('#' + tagValue);
+      }
+    } else {
+      // If no tag filter, clear the search if it was a tag search
+      const currentQuery = this.searchInput?.value?.trim() || '';
+      if (currentQuery.startsWith('#') || currentQuery.startsWith('tag:')) {
+        if (this.searchEngine) {
+          this.searchEngine.setSearchQuery('');
+        }
+      }
+    }
+    
     // Update filter button state
     this.updateFilterButtonState();
     
@@ -312,10 +405,17 @@ class YouTabsSidebar extends YouTabsCore {
     
     this.updateFilterHeadingsCount();
     
+    // Reset tag filter input
+    if (this.filterTagInput) {
+      this.filterTagInput.value = '';
+    }
+    
     // Apply reset to core filter
-    const core = this.getCore();
-    if (core && typeof core.resetFilter === 'function') {
-      core.resetFilter();
+    if (this.searchEngine && typeof this.searchEngine.applyFilter === 'function') {
+      this.searchEngine.applyFilter({
+        filterTabs: true,
+        filterHeadingTypes: this.searchEngine.filterHeadingTypes
+      });
     }
     
     // Update filter button state
@@ -332,9 +432,52 @@ class YouTabsSidebar extends YouTabsCore {
     this.searchFilter.classList.toggle('active', filterState.hasActiveFilter);
   }
   
+  /**
+   * Toggle regex search mode
+   */
+  toggleRegexMode() {
+    if (!this.searchEngine) return;
+    
+    const currentMode = this.searchEngine.getRegexMode();
+    this.searchEngine.setRegexMode(!currentMode);
+    
+    // Update UI
+    if (this.searchRegex) {
+      this.searchRegex.classList.toggle('active', !currentMode);
+    }
+    
+    // Re-run search with new mode
+    if (this.searchInput && this.searchInput.value) {
+      this.setSearchQuery(this.searchInput.value);
+    }
+  }
+  
+  /**
+   * Update regex button state based on search results
+   * @param {Object} searchResults - Search results from SearchEngine
+   */
+  updateRegexButtonState(searchResults) {
+    if (!this.searchRegex) return;
+    
+    // Show error state if there's a regex error
+    if (searchResults.useRegex && searchResults.regexError) {
+      this.searchRegex.classList.add('error');
+      this.searchRegex.title = `Regex Error: ${searchResults.regexError}`;
+    } else {
+      this.searchRegex.classList.remove('error');
+      this.searchRegex.title = searchResults.useRegex ? 'Regex Search (.*) - ON' : 'Regex Search (.*)';
+    }
+  }
+  
   handleTabClick(e, tab) {
     // Don't switch if clicking close button
     if (e.target.closest('.tab-close')) return;
+    
+    // Save search query before switching tabs
+    const query = this.searchInput?.value?.trim();
+    if (query) {
+      this.saveSearchQuery(query);
+    }
     
     // Activate tab
     browser.tabs.update(tab.id, { active: true });
@@ -380,6 +523,190 @@ class YouTabsSidebar extends YouTabsCore {
     } catch (error) {
       console.error('Error opening settings:', error);
     }
+  }
+  
+  // ==================== Search History Functions ====================
+  
+  /**
+   * Load search history from IndexedDB
+   */
+  async loadSearchHistory() {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.getSearchHistory) {
+        this.searchHistory = await window.YouTabsDB.getSearchHistory(30);
+      }
+    } catch (error) {
+      console.error('Error loading search history:', error);
+      this.searchHistory = [];
+    }
+  }
+  
+  /**
+   * Save search query to history
+   */
+  async saveSearchQuery(query) {
+    if (!query || query.trim().length === 0) return;
+    
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.addSearchQuery) {
+        await window.YouTabsDB.addSearchQuery(query.trim());
+        await this.loadSearchHistory();
+      }
+    } catch (error) {
+      console.error('Error saving search query:', error);
+    }
+  }
+  
+  /**
+   * Render search history dropdown
+   */
+  renderSearchHistory(filter = '') {
+    if (!this.tabsList) return;
+    
+    // Filter history based on input
+    let filteredHistory = this.searchHistory;
+    if (filter && filter.length > 0) {
+      filteredHistory = this.searchHistory.filter(item => 
+        item.query.toLowerCase().includes(filter.toLowerCase())
+      );
+    }
+    
+    // Show empty state if no history
+    if (filteredHistory.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'sidebar-history-empty';
+      emptyDiv.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+      `;
+      const p = document.createElement('p');
+      p.textContent = filter ? 'No matching searches' : 'No recent searches';
+      emptyDiv.appendChild(p);
+      this.tabsList.innerHTML = '';
+      this.tabsList.appendChild(emptyDiv);
+      if (this.tabCount) this.tabCount.textContent = filter ? '0' : '0';
+      return;
+    }
+    
+    this.isShowingHistory = true;
+    this.historySelectedIndex = -1;
+    
+    // Render history items
+    this.tabsList.innerHTML = '';
+    filteredHistory.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = `sidebar-history-item ${index === this.historySelectedIndex ? 'selected' : ''}`;
+      div.dataset.query = item.query;
+      div.dataset.index = index;
+
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'history-icon');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.innerHTML = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+      div.appendChild(svg);
+
+      const span = document.createElement('span');
+      span.className = 'history-query';
+      span.textContent = item.query;
+      div.appendChild(span);
+
+      if (item.count > 1) {
+        const countSpan = document.createElement('span');
+        countSpan.className = 'history-count';
+        countSpan.textContent = `×${item.count}`;
+        div.appendChild(countSpan);
+      }
+
+      const btn = document.createElement('button');
+      btn.className = 'delete-history-item';
+      btn.dataset.id = item.id;
+      btn.title = 'Remove';
+      btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      div.appendChild(btn);
+
+      this.tabsList.appendChild(div);
+    });
+    
+    // Add event listeners
+    this.tabsList.querySelectorAll('.sidebar-history-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.delete-history-item')) return;
+        const query = item.dataset.query;
+        if (this.searchInput) {
+          this.searchInput.value = query;
+          this.setSearchQuery(query);
+          this.isShowingHistory = false;
+        }
+      });
+    });
+    
+    // Delete buttons
+    this.tabsList.querySelectorAll('.delete-history-item').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id);
+        try {
+          if (window.YouTabsDB && window.YouTabsDB.deleteSearchHistoryItem) {
+            await window.YouTabsDB.deleteSearchHistoryItem(id);
+            await this.loadSearchHistory();
+            const currentFilter = this.searchInput?.value.trim() || '';
+            this.renderSearchHistory(currentFilter);
+          }
+        } catch (error) {
+          console.error('Error deleting history item:', error);
+        }
+      });
+    });
+    
+    if (this.tabCount) this.tabCount.textContent = `${filteredHistory.length}`;
+  }
+  
+  /**
+   * Navigate through history items with arrow keys
+   */
+  navigateHistory(direction) {
+    const items = this.tabsList?.querySelectorAll('.sidebar-history-item');
+    if (!items || items.length === 0) return;
+    
+    this.historySelectedIndex = Math.max(0, Math.min(this.historySelectedIndex + direction, items.length - 1));
+    
+    items.forEach((item, index) => {
+      item.classList.toggle('selected', index === this.historySelectedIndex);
+      if (index === this.historySelectedIndex) {
+        item.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+  
+  /**
+   * Select current history item on Enter
+   */
+  selectHistoryItem() {
+    const items = this.tabsList?.querySelectorAll('.sidebar-history-item');
+    if (items && items[this.historySelectedIndex]) {
+      const query = items[this.historySelectedIndex].dataset.query;
+      if (this.searchInput) {
+        this.searchInput.value = query;
+        this.setSearchQuery(query);
+        this.isShowingHistory = false;
+      }
+    }
+  }
+  
+  /**
+   * Escape HTML to prevent XSS
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }
 

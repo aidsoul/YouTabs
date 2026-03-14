@@ -26,16 +26,41 @@ function extractHeadings(settings) {
 }
 
 // Debounce utility function
+// Note: Uses global SearchUtils from search-utils.js which is loaded before this file
 function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
+  return window.SearchUtils ? window.SearchUtils.debounce(func, wait) : 
+    ((...args) => {
+      let timeout;
+      const later = () => { clearTimeout(timeout); func(...args); };
       clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
+      timeout = setTimeout(later, wait);
+    });
+}
+
+// Reference to global SearchUtils (loaded from js/utils/search-utils.js)
+const SearchUtils = window.SearchUtils;
+
+// Helper function to get icon URL for notifications
+function getNotificationIconUrl() {
+  try {
+    return browser.runtime.getManifest()?.icons?.['48'] || 'icons/48.png';
+  } catch (e) {
+    return 'icons/48.png';
+  }
+}
+
+// Helper function to show a notification using Firefox notifications API
+function showNotification(message, title = 'YouTabs') {
+  try {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: getNotificationIconUrl(),
+      title: title,
+      message: message
+    });
+  } catch (error) {
+    console.warn('YouTabs: Notification API not available:', error);
+  }
 }
 
 
@@ -90,114 +115,13 @@ class YouTabsCore {
     `).join('');
   }
 
-  // Static fuzzy search helpers
+  // Static fuzzy search helpers - delegate to shared SearchUtils
   static levenshteinDistance(str1, str2, maxDist = Infinity) {
-    const m = str1.length;
-    const n = str2.length;
-    
-    // Early termination: if length difference is too large, no need to compute
-    // This is an optimization for fuzzy matching
-    if (Math.abs(m - n) > maxDist) {
-      return maxDist + 1; // Return value greater than maxDist to trigger early rejection
-    }
-    
-    // Create matrix
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    
-    // Initialize first column
-    for (let i = 0; i <= m; i++) {
-      dp[i][0] = i;
-    }
-    
-    // Initialize first row
-    for (let j = 0; j <= n; j++) {
-      dp[0][j] = j;
-    }
-    
-    // Fill the matrix
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (str1[i - 1] === str2[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = 1 + Math.min(
-            dp[i - 1][j],     // deletion
-            dp[i][j - 1],     // insertion
-            dp[i - 1][j - 1]  // substitution
-          );
-        }
-      }
-    }
-    
-    return dp[m][n];
+    return SearchUtils.levenshteinDistance(str1, str2, maxDist);
   }
 
   static fuzzyMatch(query, text, maxDistance = 2) {
-    const lowerQuery = query.toLowerCase();
-    const lowerText = text.toLowerCase();
-    
-    // Exact match
-    if (lowerText.includes(lowerQuery)) {
-      return { match: true, distance: 0, score: 1 };
-    }
-    
-    // Word-based matching - check if query words are in text
-    const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
-    const textWords = lowerText.split(/\s+/).filter(w => w.length > 0);
-    
-    if (queryWords.length > 0 && textWords.length > 0) {
-      let allWordsFound = true;
-      let totalWordDistance = 0;
-      
-      for (const qWord of queryWords) {
-        let minDist = Infinity;
-        
-        for (const tWord of textWords) {
-          // Exact word match - no need to compute distance
-          if (tWord === qWord) {
-            minDist = 0;
-            break;
-          }
-          // Skip Levenshtein if length difference is too large
-          if (Math.abs(tWord.length - qWord.length) <= maxDistance) {
-            const dist = YouTabsCore.levenshteinDistance(qWord, tWord, maxDistance);
-            if (dist < minDist) {
-              minDist = dist;
-            }
-            // Early termination if exact match found
-            if (minDist === 0) break;
-          }
-        }
-        
-        if (minDist <= maxDistance) {
-          totalWordDistance += minDist;
-        } else {
-          allWordsFound = false;
-          break; // Early termination - word not found within threshold
-        }
-      }
-      
-      if (allWordsFound) {
-        const avgDistance = totalWordDistance / queryWords.length;
-        const score = Math.max(0, 1 - avgDistance / (maxDistance + 1));
-        return { match: true, distance: avgDistance, score };
-      }
-    }
-    
-    // Check if entire query is close to text using Levenshtein
-    // Only compute if length difference is reasonable (within 50%)
-    if (lowerText.length > 0 && lowerQuery.length > 0 && 
-        Math.abs(lowerText.length - lowerQuery.length) <= Math.max(lowerQuery.length * 0.5, maxDistance)) {
-      const dist = YouTabsCore.levenshteinDistance(lowerQuery, lowerText, maxDistance);
-      const maxAllowed = Math.max(maxDistance, Math.floor(lowerQuery.length * 0.4));
-      
-      if (dist <= maxAllowed) {
-        const score = Math.max(0, 1 - dist / (maxAllowed + 1));
-        return { match: true, distance: dist, score };
-      }
-    }
-    
-    return { match: false, distance: Infinity, score: 0 };
+    return SearchUtils.fuzzyMatch(query, text, maxDistance);
   }
   
   constructor(options = {}) {
@@ -243,6 +167,12 @@ class YouTabsCore {
         // Sync search state from SearchEngine
         this.filteredTabs = results.filteredTabs;
         this.headingSearchResults = results.headingResults;
+        
+        // Call updateRegexButtonState if it exists (in popup context)
+        if (typeof this.updateRegexButtonState === 'function') {
+          this.updateRegexButtonState(results);
+        }
+        
         this.renderTabs();
       },
       onError: (error) => console.error('SearchEngine error:', error)
@@ -263,6 +193,7 @@ class YouTabsCore {
       getSearchQuery: () => this.searchQuery,
       getCustomTabNames: () => this.customTabNames,
       getPageHeadings: () => this.pageHeadings,
+      getPageTags: () => this.pageTags,
       getCustomGroupForTab: (tabId) => this.getCustomGroupForTab(tabId),
       getGroupHierarchyNames: (tabId) => this.getGroupHierarchyNames(tabId),
       getGroupHierarchyNamesForGroup: (groupId) => this.getGroupHierarchyNamesForGroup(groupId),
@@ -388,16 +319,21 @@ class YouTabsCore {
       this.renderTabs();
     });
     
-    this.groupManager.on('groupCreated', () => {
+    this.groupManager.on('groupCreated', ({ group }) => {
+      this.renderTabs();
+      // Show notification for group creation
+      showNotification(`Group "${group.name}" was created`);
+    });
+    
+    this.groupManager.on('groupUpdated', ({ group, changes }) => {
       this.renderTabs();
     });
     
-    this.groupManager.on('groupUpdated', () => {
+    this.groupManager.on('groupDeleted', ({ groupId, deletedGroups, deletedCount }) => {
       this.renderTabs();
-    });
-    
-    this.groupManager.on('groupDeleted', () => {
-      this.renderTabs();
+      // Show notification for group deletion
+      const groupNames = deletedGroups.map(g => g.name).join(', ');
+      showNotification(`Group "${groupNames}" ${deletedCount > 1 ? 'deleted' : 'removed'}`);
     });
     
     this.groupManager.on('tabAddedToGroup', () => {
@@ -431,6 +367,9 @@ class YouTabsCore {
     
     // Load page headings from storage (via SearchEngine)
     await this.searchEngine.loadPageHeadings();
+    
+    // Load page tags from storage (via SearchEngine)
+    await this.searchEngine.loadPageTags();
     
     // Load current window tabs
     await this.loadTabs();
@@ -546,6 +485,34 @@ class YouTabsCore {
     }
   }
   
+  get pageTags() {
+    return this.searchEngine ? this.searchEngine.pageTags : {};
+  }
+  
+  set pageTags(value) {
+    if (this.searchEngine) {
+      this.searchEngine.pageTags = value;
+    }
+  }
+  
+  // Get tags for a specific tab
+  getTagsForTab(tab) {
+    if (!tab || !tab.url) return [];
+    const urlKey = this.getUrlKey(tab.url);
+    return this.pageTags[urlKey] || [];
+  }
+  
+  // Set tags for a specific tab
+  async setTagsForTab(tab, tags) {
+    if (!tab || !tab.url) return;
+    await this.searchEngine.setTagsForUrl(tab.url, tags);
+  }
+  
+  // Get all unique tags
+  async getAllUniqueTags() {
+    return await this.searchEngine.getAllUniqueTags();
+  }
+  
   // Get a URL key for indexing - delegate to SearchEngine
   getUrlKey(url) {
     return this.searchEngine ? this.searchEngine.getUrlKey(url) : url;
@@ -584,42 +551,78 @@ class YouTabsCore {
   createModal() {
     if (this.modal) return;
     
-    const modalHTML = `
-      <div class="modal-overlay" id="customModalOverlay">
-        <div class="custom-modal">
-          <div class="modal-header">
-            <h3 class="modal-title" id="modalTitle"></h3>
-            <button class="modal-close" id="modalClose" aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body">
-            <p class="modal-message" id="modalMessage"></p>
-            <div class="modal-input-wrapper" id="modalInputWrapper" style="display: none;">
-              <input type="text" class="modal-input" id="modalInput" placeholder="Enter name...">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="modal-btn modal-btn-cancel" id="modalCancel">Cancel</button>
-            <button class="modal-btn modal-btn-confirm" id="modalConfirm">OK</button>
-          </div>
-        </div>
-      </div>
-    `;
+    // Create modal using DOM elements for security
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'customModalOverlay';
     
-    const container = document.createElement('div');
-    container.innerHTML = modalHTML;
-    this.modal = container.firstElementChild;
+    const modal = document.createElement('div');
+    modal.className = 'custom-modal';
+    
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    
+    const title = document.createElement('h3');
+    title.className = 'modal-title';
+    title.id = 'modalTitle';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'modal-close';
+    closeBtn.id = 'modalClose';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    const body = document.createElement('div');
+    body.className = 'modal-body';
+    
+    const message = document.createElement('p');
+    message.className = 'modal-message';
+    message.id = 'modalMessage';
+    
+    const inputWrapper = document.createElement('div');
+    inputWrapper.className = 'modal-input-wrapper';
+    inputWrapper.id = 'modalInputWrapper';
+    inputWrapper.style.display = 'none';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'modal-input';
+    input.id = 'modalInput';
+    input.placeholder = 'Enter name...';
+    
+    inputWrapper.appendChild(input);
+    body.appendChild(message);
+    body.appendChild(inputWrapper);
+    
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-btn modal-btn-cancel';
+    cancelBtn.id = 'modalCancel';
+    cancelBtn.textContent = 'Cancel';
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'modal-btn modal-btn-confirm';
+    confirmBtn.id = 'modalConfirm';
+    confirmBtn.textContent = 'OK';
+    
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    
+    this.modal = overlay;
     document.body.appendChild(this.modal);
     
-    // Bind modal events - query relative to the modal to avoid conflicts
-    const overlay = this.modal;
-    const closeBtn = this.modal.querySelector('#modalClose');
-    const cancelBtn = this.modal.querySelector('#modalCancel');
-    const confirmBtn = this.modal.querySelector('#modalConfirm');
-    const input = this.modal.querySelector('#modalInput');
+    // Bind modal events - using the already created elements
+    const modalElement = this.modal.querySelector('.custom-modal');
     
     // Close on overlay click
     overlay.addEventListener('click', (e) => {
@@ -939,12 +942,31 @@ class YouTabsCore {
       const tab = this.tabs.find(t => t.id === Number(tabId));
       const currentName = this.getTabDisplayTitle(tab);
       const newName = await this.showPrompt('Rename Tab', 'Enter new name:', currentName);
-      if (newName?.trim() && newName !== currentName) {
+      if (newName && typeof newName === 'string' && newName.trim() && newName !== currentName) {
         await this.setTabCustomName(tabId, newName.trim());
       }
       this.hideContextMenu();
     });
     menu.appendChild(renameItem);
+    
+    // Tags option
+    const tagsItem = document.createElement('div');
+    tagsItem.className = 'context-menu-item';
+    tagsItem.textContent = 'Tags';
+    tagsItem.addEventListener('click', async () => {
+      const tab = this.tabs.find(t => t.id === Number(tabId));
+      if (tab) {
+        const currentTags = this.getTagsForTab(tab);
+        const tagsInput = await this.showPrompt('Manage Tags', 'Enter tags (comma-separated):', currentTags.join(', '));
+        if (tagsInput !== null) {
+          const newTags = tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          await this.setTagsForTab(tab, newTags);
+          this.renderTabs();
+        }
+      }
+      this.hideContextMenu();
+    });
+    menu.appendChild(tagsItem);
     
     // Restore original name option (only if custom name exists)
     if (hasCustomName) {
@@ -998,7 +1020,7 @@ class YouTabsCore {
       newGroupItem.textContent = 'Create group...';
       newGroupItem.addEventListener('click', async () => {
         const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-        if (groupName?.trim()) {
+        if (groupName && typeof groupName === 'string' && groupName.trim()) {
           const newGroup = await this.createCustomGroup(groupName.trim());
           await this.addTabToGroup(tabId, newGroup.id);
         }
@@ -1082,7 +1104,7 @@ class YouTabsCore {
       createGroupItem.textContent = 'Create group...';
       createGroupItem.addEventListener('click', async () => {
         const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-        if (groupName?.trim()) {
+        if (groupName && typeof groupName === 'string' && groupName.trim()) {
           const newGroup = await this.createCustomGroup(groupName.trim());
           await this.addTabToGroup(tabId, newGroup.id);
         }
@@ -1271,7 +1293,7 @@ class YouTabsCore {
       addSubgroupItem.textContent = 'Add subgroup';
       addSubgroupItem.addEventListener('click', async () => {
         const subgroupName = await this.showPrompt('New Subgroup', 'Enter subgroup name:', 'New subgroup');
-        if (subgroupName?.trim()) {
+        if (subgroupName && typeof subgroupName === 'string' && subgroupName.trim()) {
           await this.createCustomGroup(subgroupName.trim(), 'blue', groupId);
         }
         this.hideContextMenu();
@@ -1305,7 +1327,7 @@ class YouTabsCore {
     createGroupItem.textContent = 'Create group';
     createGroupItem.addEventListener('click', async () => {
       const groupName = await this.showPrompt('New Group', 'Enter group name:', 'New group');
-      if (groupName?.trim()) {
+      if (groupName && typeof groupName === 'string' && groupName.trim()) {
         await this.createCustomGroup(groupName.trim());
       }
       this.hideContextMenu();
@@ -1319,16 +1341,54 @@ class YouTabsCore {
   
   // Position context menu
   positionContextMenu(menu, e) {
+    // Menu might not be in DOM yet, so we need to temporarily add it to get dimensions
+    const wasInDOM = menu.parentElement !== null;
+    if (!wasInDOM) {
+      menu.style.visibility = 'hidden';
+      menu.style.position = 'fixed';
+      document.body.appendChild(menu);
+    }
+    
     const rect = menu.getBoundingClientRect();
+    
+    // Get the sidebar container bounds
+    const container = document.querySelector('.you-tabs-container') || document.body;
+    const containerRect = container.getBoundingClientRect();
+    
     let x = e.clientX;
     let y = e.clientY;
     
-    // Adjust if menu goes off screen
-    if (x + rect.width > window.innerWidth) {
-      x = window.innerWidth - rect.width - 8;
+    // Check if menu would go off the right edge - open to the left instead
+    if (x + rect.width > containerRect.right) {
+      // Try opening to the left of the click position
+      const leftSpace = x - containerRect.left;
+      
+      if (leftSpace > rect.width + 10) {
+        // There's enough space on the left, open left
+        x = x - rect.width - 8;
+      } else {
+        // Not enough space on left either, use right edge as fallback
+        x = containerRect.right - rect.width - 8;
+      }
     }
-    if (y + rect.height > window.innerHeight) {
-      y = window.innerHeight - rect.height - 8;
+    
+    // Also check if too far left
+    if (x < containerRect.left) {
+      x = containerRect.left + 8;
+    }
+    
+    // Check vertical boundaries
+    if (y + rect.height > containerRect.bottom) {
+      y = containerRect.bottom - rect.height - 8;
+    }
+    if (y < containerRect.top) {
+      y = containerRect.top + 8;
+    }
+    
+    // Remove from DOM if it wasn't there before, then add it back positioned
+    if (!wasInDOM) {
+      document.body.removeChild(menu);
+      menu.style.visibility = '';
     }
     
     menu.style.left = `${x}px`;
@@ -1355,6 +1415,11 @@ class YouTabsCore {
         // Update UIRenderer settings reference
         if (this.uiRenderer) {
           this.uiRenderer.options.settings = this.settings;
+        }
+        
+        // Check if theme changed
+        if (oldSettings.theme !== this.settings.theme) {
+          this.applyTheme(this.settings.theme);
         }
         
         // Update action buttons visibility if setting changed
@@ -1390,6 +1455,9 @@ class YouTabsCore {
     try {
       // Load settings from SettingsManager
       this.settings = await this.settingsManager.getAll();
+      
+      // Apply theme
+      await this.applyTheme(this.settings.theme);
       
       // Migrate from localStorage to IndexedDB if needed
       if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
@@ -1604,7 +1672,7 @@ class YouTabsCore {
     if (!group) return;
     
     const newName = await this.showPrompt('Rename Group', 'Enter new group name:', group.name);
-    if (newName && newName.trim() !== '') {
+    if (newName && typeof newName === 'string' && newName.trim() !== '') {
       this.renameCustomGroup(groupId, newName.trim());
     }
   }
@@ -2286,6 +2354,15 @@ class YouTabsCore {
       });
     }
     
+    const openIndexesBtn = document.getElementById('openIndexesBtn');
+    if (openIndexesBtn) {
+      openIndexesBtn.addEventListener('click', async () => {
+        // Open the indexes page in a new tab
+        const indexesUrl = browser.runtime.getURL('indexes.html');
+        await browser.tabs.create({ url: indexesUrl });
+      });
+    }
+    
     const indexAllBtn = document.getElementById('indexAllBtn');
     if (indexAllBtn) {
       indexAllBtn.addEventListener('click', async () => {
@@ -2588,6 +2665,11 @@ class YouTabsCore {
   showTabPreview(e, tab) {
     if (!this.tabPreview) return;
     
+    // Check if tab preview is enabled in settings
+    if (this.settings && this.settings.showTabPreview === false) {
+      return;
+    }
+    
     const title = tab.title || 'New tab';
     const url = tab.url || '';
     
@@ -2735,5 +2817,24 @@ class YouTabsCore {
   // Reset filter to default values - delegate to SearchEngine
   resetFilter() {
     this.searchEngine.resetFilter();
+  }
+  
+  // Apply theme to the page
+  async applyTheme(theme) {
+    // Default to light theme
+    const themeName = theme || 'light';
+    
+    // Remove existing theme link if present
+    const existingThemeLink = document.getElementById('theme-css');
+    if (existingThemeLink) {
+      existingThemeLink.remove();
+    }
+    
+    // Create and add new theme link
+    const themeLink = document.createElement('link');
+    themeLink.id = 'theme-css';
+    themeLink.rel = 'stylesheet';
+    themeLink.href = `css/${themeName}.css`;
+    document.head.appendChild(themeLink);
   }
 }

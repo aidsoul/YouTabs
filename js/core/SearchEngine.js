@@ -18,6 +18,7 @@ class SearchEngine {
    * @param {Function} options.getGroupHierarchyNames - Callback to get group hierarchy for a tab
    * @param {Function} options.onSearchResults - Callback when search results change
    * @param {Function} options.onError - Callback for errors
+   * @param {StateManager} options.stateManager - Optional StateManager instance for centralized state
    */
   constructor(options = {}) {
     this.options = {
@@ -35,6 +36,10 @@ class SearchEngine {
     this.filteredTabs = [];
     this.headingSearchResults = [];
     
+    // Regex search mode
+    this.useRegex = false;
+    this.lastRegexError = null;
+    
     // Filter state
     this.filterTabs = true;
     this.filterHeadingTypes = ['heading', 'paragraph', 'link', 'image', 'div', 'ul', 'ol', 'li', 'input', 'video', 'audio', 'iframe', 'span', 'table', 'section', 'article', 'aside', 'nav', 'footer', 'header', 'blockquote', 'code', 'pre', 'cite', 'abbr', 'time', 'mark', 'button', 'textarea', 'select', 'label', 'figure', 'details', 'summary', 'meta', 'aria', 'data'];
@@ -43,6 +48,9 @@ class SearchEngine {
     
     // Indexed page headings for search
     this.pageHeadings = {}; // { urlKey: [{ id: string, text: string, level: number, url: string }] }
+    
+    // Page tags for search and filtering
+    this.pageTags = {}; // { urlKey: [tag1, tag2, ...] }
     
     // Mapping from tabId to urlKey for search
     this.tabIdToUrlKey = {}; // { tabId: urlKey }
@@ -59,12 +67,22 @@ class SearchEngine {
     // Debounced search
     this._debouncedPerformSearch = this._debounce((query) => this._performSearch(query), 150);
     
+    // Search result cache
+    this._searchCache = new Map();
+    this._cacheMaxSize = 50;
+    this._cacheVersion = 0; // Increment to invalidate cache when tabs change
+    
+    // StateManager integration
+    this.stateManager = options.stateManager || null;
+    this._syncWithStateManager = options.syncWithStateManager !== false;
+    
     // Initialize worker
     this._initWorker();
   }
   
   // ==================== Static Fuzzy Search Helpers ====================
-  
+  // Now uses global SearchUtils from search-utils.js (loaded in manifest)
+
   /**
    * Calculate Levenshtein distance between two strings
    * @param {string} str1 - First string
@@ -73,45 +91,30 @@ class SearchEngine {
    * @returns {number} The Levenshtein distance
    */
   static levenshteinDistance(str1, str2, maxDist = Infinity) {
+    return window.SearchUtils?.levenshteinDistance(str1, str2, maxDist) ?? 
+      SearchEngine._inlineLevenshtein(str1, str2, maxDist);
+  }
+
+  /**
+   * Inline Levenshtein implementation as fallback
+   * @private
+   */
+  static _inlineLevenshtein(str1, str2, maxDist = Infinity) {
     const m = str1.length;
     const n = str2.length;
-    
-    // Early termination: if length difference is too large, no need to compute
-    if (Math.abs(m - n) > maxDist) {
-      return maxDist + 1;
-    }
-    
-    // Create matrix
+    if (Math.abs(m - n) > maxDist) return maxDist + 1;
     const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    
-    // Initialize first column
-    for (let i = 0; i <= m; i++) {
-      dp[i][0] = i;
-    }
-    
-    // Initialize first row
-    for (let j = 0; j <= n; j++) {
-      dp[0][j] = j;
-    }
-    
-    // Fill the matrix
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
     for (let i = 1; i <= m; i++) {
       for (let j = 1; j <= n; j++) {
-        if (str1[i - 1] === str2[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = 1 + Math.min(
-            dp[i - 1][j],     // deletion
-            dp[i][j - 1],     // insertion
-            dp[i - 1][j - 1]  // substitution
-          );
-        }
+        if (str1[i - 1] === str2[j - 1]) dp[i][j] = dp[i - 1][j - 1];
+        else dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
       }
     }
-    
     return dp[m][n];
   }
-  
+
   /**
    * Perform fuzzy matching between query and text
    * @param {string} query - Search query
@@ -120,69 +123,49 @@ class SearchEngine {
    * @returns {Object} Match result with match, distance, and score properties
    */
   static fuzzyMatch(query, text, maxDistance = 2) {
+    return window.SearchUtils?.fuzzyMatch(query, text, maxDistance) ?? 
+      SearchEngine._inlineFuzzyMatch(query, text, maxDistance);
+  }
+
+  /**
+   * Inline fuzzy match implementation as fallback
+   * @private
+   */
+  static _inlineFuzzyMatch(query, text, maxDistance = 2) {
     const lowerQuery = query.toLowerCase();
     const lowerText = text.toLowerCase();
-    
-    // Exact match
-    if (lowerText.includes(lowerQuery)) {
-      return { match: true, distance: 0, score: 1 };
-    }
-    
-    // Word-based matching - check if query words are in text
+    if (lowerText.includes(lowerQuery)) return { match: true, distance: 0, score: 1 };
     const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
     const textWords = lowerText.split(/\s+/).filter(w => w.length > 0);
-    
     if (queryWords.length > 0 && textWords.length > 0) {
       let allWordsFound = true;
       let totalWordDistance = 0;
-      
       for (const qWord of queryWords) {
         let minDist = Infinity;
-        
         for (const tWord of textWords) {
-          // Exact word match - no need to compute distance
-          if (tWord === qWord) {
-            minDist = 0;
-            break;
-          }
-          // Skip Levenshtein if length difference is too large
+          if (tWord === qWord) { minDist = 0; break; }
           if (Math.abs(tWord.length - qWord.length) <= maxDistance) {
-            const dist = SearchEngine.levenshteinDistance(qWord, tWord, maxDistance);
-            if (dist < minDist) {
-              minDist = dist;
-            }
-            // Early termination if exact match found
+            const dist = SearchEngine._inlineLevenshtein(qWord, tWord, maxDistance);
+            if (dist < minDist) { minDist = dist; }
             if (minDist === 0) break;
           }
         }
-        
-        if (minDist <= maxDistance) {
-          totalWordDistance += minDist;
-        } else {
-          allWordsFound = false;
-          break;
-        }
+        if (minDist <= maxDistance) { totalWordDistance += minDist; }
+        else { allWordsFound = false; break; }
       }
-      
       if (allWordsFound) {
         const avgDistance = totalWordDistance / queryWords.length;
-        const score = Math.max(0, 1 - avgDistance / (maxDistance + 1));
-        return { match: true, distance: avgDistance, score };
+        return { match: true, distance: avgDistance, score: Math.max(0, 1 - avgDistance / (maxDistance + 1)) };
       }
     }
-    
-    // Check if entire query is close to text using Levenshtein
     if (lowerText.length > 0 && lowerQuery.length > 0 && 
         Math.abs(lowerText.length - lowerQuery.length) <= Math.max(lowerQuery.length * 0.5, maxDistance)) {
-      const dist = SearchEngine.levenshteinDistance(lowerQuery, lowerText, maxDistance);
+      const dist = SearchEngine._inlineLevenshtein(lowerQuery, lowerText, maxDistance);
       const maxAllowed = Math.max(maxDistance, Math.floor(lowerQuery.length * 0.4));
-      
       if (dist <= maxAllowed) {
-        const score = Math.max(0, 1 - dist / (maxAllowed + 1));
-        return { match: true, distance: dist, score };
+        return { match: true, distance: dist, score: Math.max(0, 1 - dist / (maxAllowed + 1)) };
       }
     }
-    
     return { match: false, distance: Infinity, score: 0 };
   }
   
@@ -229,7 +212,121 @@ class SearchEngine {
     }
   }
   
+  /**
+   * Set StateManager instance
+   * @param {StateManager} manager - StateManager instance
+   * @param {boolean} sync - Whether to sync state changes
+   */
+  setStateManager(manager, sync = true) {
+    this.stateManager = manager;
+    this._syncWithStateManager = sync;
+    
+    // Sync current state immediately
+    if (sync && manager) {
+      this.stateManager.setSearchState({
+        query: this.searchQuery,
+        filteredTabs: this.filteredTabs,
+        headingResults: this.headingSearchResults
+      });
+    }
+  }
+  
   // ==================== Public Search API ====================
+  
+  /**
+   * Set regex search mode on/off
+   * @param {boolean} useRegex - Whether to use regex matching
+   */
+  setRegexMode(useRegex) {
+    this.useRegex = Boolean(useRegex);
+    this.lastRegexError = null;
+    
+    // Re-run search if there's an active search query
+    if (this.searchQuery) {
+      this._debouncedPerformSearch(this.searchQuery);
+    }
+    
+    // Notify listener about regex mode change
+    if (this.options.onSearchResults) {
+      this.options.onSearchResults({
+        query: this.searchQuery,
+        filteredTabs: this.filteredTabs,
+        headingResults: this.headingSearchResults,
+        useRegex: this.useRegex,
+        regexError: this.lastRegexError
+      });
+    }
+  }
+  
+  /**
+   * Get current regex mode state
+   * @returns {boolean} Current regex mode state
+   */
+  getRegexMode() {
+    return this.useRegex;
+  }
+  
+  /**
+   * Check if regex mode is enabled
+   * @returns {boolean} True if regex mode is enabled
+   */
+  isRegexMode() {
+    return this.useRegex;
+  }
+  
+  /**
+   * Get last regex error message
+   * @returns {string|null} Error message or null if no error
+   */
+  getLastRegexError() {
+    return this.lastRegexError;
+  }
+  
+  /**
+   * Validate a regex pattern without performing search
+   * @param {string} pattern - Regex pattern to validate
+   * @returns {Object} Validation result with valid boolean and error message
+   */
+  validateRegexPattern(pattern) {
+    const result = window.SearchUtils?.validateRegexPattern(pattern);
+    return result !== undefined ? result : SearchEngine._inlineValidateRegex(pattern);
+  }
+  
+  /**
+   * Inline regex validation as fallback
+   * @private
+   */
+  static _inlineValidateRegex(pattern) {
+    if (!pattern) {
+      return { valid: false, error: 'Pattern is empty' };
+    }
+    
+    // Check for potentially dangerous patterns that can cause catastrophic backtracking
+    const dangerousPatterns = [
+      { regex: /\(\.*\+\.*\)+/, message: 'Nested quantifiers can cause performance issues' },
+      { regex: /\(\.*\*\.*\)+/, message: 'Nested quantifiers can cause performance issues' },
+      { regex: /\(\s*\|\s*\)+\+/, message: 'Nested alternation can cause performance issues' },
+      { regex: /\.\*\.\*\.\*/, message: 'Multiple greedy quantifiers can cause performance issues' }
+    ];
+    
+    for (const { regex, message } of dangerousPatterns) {
+      if (regex.test(pattern)) {
+        return { valid: false, error: message };
+      }
+    }
+    
+    // Limit pattern length
+    if (pattern.length > 100) {
+      return { valid: false, error: 'Pattern is too long' };
+    }
+    
+    try {
+      new RegExp(pattern);
+      return { valid: true, error: null };
+    } catch (error) {
+      return { valid: false, error: error.message };
+    }
+  }
   
   /**
    * Set the search query and trigger search
@@ -286,6 +383,19 @@ class SearchEngine {
         headingResults: []
       });
     }
+    
+    // Sync with StateManager if enabled
+    if (this._syncWithStateManager && this.stateManager) {
+      this.stateManager.clearSearch();
+    }
+  }
+  
+  /**
+   * Invalidate search cache (call when tabs change)
+   */
+  invalidateCache() {
+    this._cacheVersion++;
+    this._searchCache.clear();
   }
   
   /**
@@ -308,11 +418,34 @@ class SearchEngine {
   async _performSearch(query) {
     const lowerQuery = query?.toLowerCase() || '';
     this.searchQuery = lowerQuery;
+    this.lastRegexError = null;
     
     const tabs = this.options.getTabs();
+    const tabsVersion = this._cacheVersion;
     
-    // Apply filter - only filter tabs if filterTabs is enabled
-    this.filteredTabs = (lowerQuery && this.filterTabs) ? this._filterTabsList(tabs, lowerQuery) : [];
+    // Check cache first (only for non-regex searches)
+    if (lowerQuery && this.filterTabs && !this.useRegex) {
+      const cacheKey = `${lowerQuery}:${tabs.length}:${tabsVersion}`;
+      const cached = this._searchCache.get(cacheKey);
+      if (cached) {
+        this.filteredTabs = cached;
+      } else {
+        // Apply filter
+        this.filteredTabs = this._filterTabsList(tabs, lowerQuery);
+        
+        // Add to cache
+        if (this._searchCache.size >= this._cacheMaxSize) {
+          const firstKey = this._searchCache.keys().next().value;
+          this._searchCache.delete(firstKey);
+        }
+        this._searchCache.set(cacheKey, this.filteredTabs);
+      }
+    } else if (lowerQuery && this.filterTabs && this.useRegex) {
+      // Regex search - don't use cache
+      this.filteredTabs = this._filterTabsListWithRegex(tabs, query);
+    } else {
+      this.filteredTabs = [];
+    }
     
     // Also search page headings if enabled and has heading types selected
     this.headingSearchResults = [];
@@ -329,15 +462,40 @@ class SearchEngine {
       this.options.onSearchResults({
         query: lowerQuery,
         filteredTabs: this.filteredTabs,
-        headingResults: this.headingSearchResults
+        headingResults: this.headingSearchResults,
+        useRegex: this.useRegex,
+        regexError: this.lastRegexError
       });
     }
+    
+    // Sync with StateManager if enabled
+    if (this._syncWithStateManager && this.stateManager) {
+      this.stateManager.setSearchState({
+        query: lowerQuery,
+        filteredTabs: this.filteredTabs,
+        headingResults: this.headingSearchResults,
+        useRegex: this.useRegex
+      });
+    }
+  }
+  
+  /**
+   * Invalidate search cache (call when tabs change)
+   */
+  invalidateCache() {
+    this._cacheVersion++;
+    this._searchCache.clear();
   }
   
   _filterTabsList(tabs, query) {
     if (!query) return tabs;
     
     const customTabNames = this.options.getCustomTabNames();
+    
+    // Check if this is a tag search (starts with # or tag:)
+    const tagMatch = query.match(/^#(.+)$/) || query.match(/^tag:(.+)$/);
+    const isTagSearch = !!tagMatch;
+    const tagQuery = isTagSearch ? tagMatch[1].toLowerCase().trim() : null;
     
     return tabs.filter(tab => {
       const title = (tab.title || '').toLowerCase();
@@ -351,8 +509,192 @@ class SearchEngine {
       const groupNames = this.options.getGroupHierarchyNames(tab.id);
       const groupNameSearch = groupNames.join(' ').toLowerCase();
       
+      // If tag search, check if tab has the matching tag
+      if (isTagSearch) {
+        const urlKey = this.getUrlKey(tab.url);
+        const tabTags = this.pageTags[urlKey] || [];
+        return tabTags.some(tag => tag.toLowerCase().includes(tagQuery));
+      }
+      
       return title.includes(query) || url.includes(query) || customTabName.includes(query) || groupNameSearch.includes(query);
     });
+  }
+  
+  /**
+   * Filter tabs using regex pattern matching
+   * @param {Array} tabs - Array of tabs to filter
+   * @param {string} pattern - Regex pattern
+   * @returns {Array} Filtered tabs
+   */
+  _filterTabsListWithRegex(tabs, pattern) {
+    if (!pattern) return tabs;
+    
+    const customTabNames = this.options.getCustomTabNames();
+    
+    // Validate pattern first
+    const validation = this.validateRegexPattern(pattern);
+    if (!validation.valid) {
+      this.lastRegexError = validation.error;
+      return [];
+    }
+    
+    this.lastRegexError = null;
+    
+    // Compile regex ONCE before filtering for better performance
+    let regex;
+    try {
+      regex = new RegExp(pattern, 'i');
+    } catch (error) {
+      this.lastRegexError = error.message;
+      return [];
+    }
+    
+    // Create a reusable match function that uses the pre-compiled regex
+    // With protection against infinite loops, memory exhaustion, and long-running execution
+    const MAX_MATCHES_PER_FIELD = 1000;
+    const MAX_REGEX_TIME_MS = 2000; // 2 second timeout
+    const matchWithRegex = (text) => {
+      if (!text) return { match: false, matches: [], error: null };
+      const matches = [];
+      let match;
+      let matchCount = 0;
+      const startTime = performance.now();
+      
+      // Reset lastIndex to ensure fresh matching
+      regex.lastIndex = 0;
+      
+      // Use try-catch with limit to prevent catastrophic backtracking
+      try {
+        while ((match = regex.exec(text)) !== null) {
+          // Check timeout
+          if (performance.now() - startTime > MAX_REGEX_TIME_MS) {
+            return { 
+              match: matches.length > 0, 
+              matches, 
+              error: 'Regex search timed out' 
+            };
+          }
+          
+          matches.push({
+            value: match[0],
+            index: match.index,
+            groups: match.slice(1)
+          });
+          matchCount++;
+          
+          // Limit matches to prevent memory exhaustion
+          if (matchCount >= MAX_MATCHES_PER_FIELD) {
+            break;
+          }
+          
+          // Prevent infinite loop for zero-width matches
+          if (match.index === regex.lastIndex) {
+            regex.lastIndex++;
+          }
+        }
+      } catch (e) {
+        // Regex execution error - return empty results
+        return { match: false, matches: [], error: e.message };
+      }
+      
+      return {
+        match: matches.length > 0,
+        matches,
+        error: null
+      };
+    };
+    
+    return tabs.filter(tab => {
+      const title = tab.title || '';
+      const url = tab.url || '';
+      
+      // Get custom tab name for this tab
+      const numericTabId = Number(tab.id);
+      const customTabName = customTabNames[numericTabId]?.customName || '';
+      
+      // Get group and subgroup names for this tab
+      const groupNames = this.options.getGroupHierarchyNames(tab.id);
+      const groupNameSearch = groupNames.join(' ');
+      
+      // Check if this is a tag search (starts with # or tag:)
+      const tagMatch = pattern.match(/^#(.+)$/) || pattern.match(/^tag:(.+)$/);
+      const isTagSearch = !!tagMatch;
+      const tagQuery = isTagSearch ? tagMatch[1].toLowerCase().trim() : null;
+      
+      // If tag search, check if tab has the matching tag
+      if (isTagSearch) {
+        const urlKey = this.getUrlKey(tab.url);
+        const tabTags = this.pageTags[urlKey] || [];
+        return tabTags.some(tag => tag.toLowerCase().includes(tagQuery));
+      }
+      
+      // Perform regex search on each field using pre-compiled regex
+      if (matchWithRegex(title).match) return true;
+      if (matchWithRegex(url).match) return true;
+      if (matchWithRegex(customTabName).match) return true;
+      if (matchWithRegex(groupNameSearch).match) return true;
+      
+      return false;
+    });
+  }
+  
+  /**
+   * Inline regex matching as fallback
+   * @private
+   */
+  static _inlineRegexMatch(pattern, text) {
+    if (!pattern || !text) {
+      return { match: false, matches: [], error: null };
+    }
+    
+    const MAX_MATCHES = 1000;
+    const MAX_REGEX_TIME_MS = 2000; // 2 second timeout
+    const startTime = performance.now();
+    
+    try {
+      const regex = new RegExp(pattern, 'i');
+      const matches = [];
+      let match;
+      let matchCount = 0;
+      
+      while ((match = regex.exec(text)) !== null) {
+        // Check timeout
+        if (performance.now() - startTime > MAX_REGEX_TIME_MS) {
+          return { 
+            match: matches.length > 0, 
+            matches, 
+            error: 'Regex search timed out' 
+          };
+        }
+        
+        matches.push({
+          value: match[0],
+          index: match.index,
+          groups: match.slice(1)
+        });
+        
+        matchCount++;
+        if (matchCount >= MAX_MATCHES) {
+          break;
+        }
+        
+        if (match.index === regex.lastIndex) {
+          regex.lastIndex++;
+        }
+      }
+      
+      return {
+        match: matches.length > 0,
+        matches,
+        error: null
+      };
+    } catch (error) {
+      return {
+        match: false,
+        matches: [],
+        error: error.message
+      };
+    }
   }
   
   // ==================== Page Headings Search ====================
@@ -780,7 +1122,7 @@ class SearchEngine {
   getUrlKey(url) {
     try {
       const urlObj = new URL(url);
-      return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+      return urlObj.origin + urlObj.pathname.replace(/\/$/, '') + urlObj.search;
     } catch (e) {
       console.log('SearchEngine: getUrlKey failed to parse URL:', url, e);
       return url;
@@ -963,6 +1305,91 @@ class SearchEngine {
       }
     } catch (error) {
       console.error('SearchEngine: Error loading page headings:', error);
+    }
+  }
+  
+  /**
+   * Load page tags from IndexedDB
+   */
+  async loadPageTags() {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        await window.YouTabsDB.openDatabase();
+        
+        const allPageTags = await window.YouTabsDB.getAllPageTags();
+        this.pageTags = allPageTags || {};
+      }
+    } catch (error) {
+      console.error('SearchEngine: Error loading page tags:', error);
+    }
+  }
+  
+  /**
+   * Get tags for a specific URL
+   * @param {string} url - The URL to get tags for
+   * @returns {Array<string>} Array of tags
+   */
+  getTagsForUrl(url) {
+    const urlKey = this.getUrlKey(url);
+    return this.pageTags[urlKey] || [];
+  }
+  
+  /**
+   * Save tags for a URL
+   * @param {string} url - The URL to save tags for
+   * @param {Array<string>} tags - Array of tags
+   */
+  async setTagsForUrl(url, tags) {
+    const urlKey = this.getUrlKey(url);
+    
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        await window.YouTabsDB.savePageTags(urlKey, tags);
+        this.pageTags[urlKey] = tags.map(t => t.toLowerCase().trim()).filter(t => t.length > 0);
+        
+        // Invalidate search cache when tags change
+        this._cacheVersion++;
+        
+        // Re-run search if there's an active search query
+        if (this.searchQuery) {
+          this.setSearchQuery(this.searchQuery);
+        }
+      }
+    } catch (error) {
+      console.error('SearchEngine: Error saving page tags:', error);
+    }
+  }
+  
+  /**
+   * Get all unique tags
+   * @returns {Promise<Array<string>>}
+   */
+  async getAllUniqueTags() {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        return await window.YouTabsDB.getAllUniqueTags();
+      }
+      return [];
+    } catch (error) {
+      console.error('SearchEngine: Error getting all unique tags:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Search pages by tag
+   * @param {string} tag - Tag to search for
+   * @returns {Promise<Array<string>>} Array of URLs with matching tags
+   */
+  async searchPagesByTag(tag) {
+    try {
+      if (window.YouTabsDB && window.YouTabsDB.isIndexedDBAvailable()) {
+        return await window.YouTabsDB.searchPagesByTag(tag);
+      }
+      return [];
+    } catch (error) {
+      console.error('SearchEngine: Error searching pages by tag:', error);
+      return [];
     }
   }
   

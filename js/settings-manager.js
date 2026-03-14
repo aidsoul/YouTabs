@@ -6,7 +6,13 @@
 class SettingsManager {
   // Default settings
     static defaultSettings = {
+    // Theme settings
+    theme: 'dark', // 'light' or 'dark'
+    
+    // Display settings
     showFavicon: true,
+    showTabTitle: true,
+    showTabPreview: true,
     showAudio: true,
     closeOnSelect: true,
     enablePageSearch: true,
@@ -61,6 +67,9 @@ class SettingsManager {
     indexThrottleMs: 1000,
     maxIndexedPages: 1000,
     lazyLoadGroups: false,
+    // Auto-discard settings (default: 5 minutes)
+    autoDiscardEnabled: false,
+    autoDiscardMinutes: 5,
     // Grouping settings
     enableGrouping: true,
     groupingType: 'custom',
@@ -71,6 +80,7 @@ class SettingsManager {
 
   constructor() {
     this._settings = null;
+    this._cachedSettings = null; // Cache for merged settings
     this._listeners = [];
   }
 
@@ -79,18 +89,28 @@ class SettingsManager {
    * @returns {Promise<Object>} Settings object
    */
   async getAll() {
-    if (this._settings !== null) {
-      return { ...SettingsManager.defaultSettings, ...this._settings };
+    if (this._cachedSettings !== null) {
+      return this._cachedSettings;
     }
 
     try {
       const stored = await browser.storage.local.get('settings');
       this._settings = stored.settings || {};
-      return { ...SettingsManager.defaultSettings, ...this._settings };
+      this._cachedSettings = { ...SettingsManager.defaultSettings, ...this._settings };
+      return this._cachedSettings;
     } catch (error) {
       console.error('SettingsManager: Error loading settings:', error);
       return { ...SettingsManager.defaultSettings };
     }
+  }
+
+  /**
+   * Invalidate the settings cache
+   * Call this after saving settings to ensure fresh data
+   * @private
+   */
+  _invalidateCache() {
+    this._cachedSettings = null;
   }
 
   /**
@@ -112,6 +132,7 @@ class SettingsManager {
     try {
       await browser.storage.local.set({ settings });
       this._settings = settings;
+      this._invalidateCache(); // Clear cached merged settings
       this._notifyListeners('save', settings);
     } catch (error) {
       console.error('SettingsManager: Error saving settings:', error);
