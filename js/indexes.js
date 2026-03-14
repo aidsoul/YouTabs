@@ -79,14 +79,36 @@ function renderTable() {
   const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, filteredData.length);
   const pageData = filteredData.slice(startIndex, endIndex);
   
-  tbody.innerHTML = pageData.map((item, index) => `
-    <tr data-url="${item.url}" data-index="${startIndex + index}">
-      <td class="indexes-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</td>
-      <td>${item.headingsCount}</td>
-      <td>${formatDate(item.indexedAt)}</td>
-      <td>${item.lastIncrementalUpdate ? formatDate(item.lastIncrementalUpdate) : '-'}</td>
-    </tr>
-  `).join('');
+  // Clear existing rows
+  tbody.innerHTML = '';
+  
+  // Create rows using DOM elements for security
+  pageData.forEach((item, index) => {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-url', item.url);
+    tr.setAttribute('data-index', String(startIndex + index));
+    
+    const urlTd = document.createElement('td');
+    urlTd.className = 'indexes-url';
+    urlTd.setAttribute('title', item.url);
+    urlTd.textContent = item.url;
+    
+    const headingsTd = document.createElement('td');
+    headingsTd.textContent = String(item.headingsCount);
+    
+    const indexedAtTd = document.createElement('td');
+    indexedAtTd.textContent = formatDate(item.indexedAt);
+    
+    const lastUpdateTd = document.createElement('td');
+    lastUpdateTd.textContent = item.lastIncrementalUpdate ? formatDate(item.lastIncrementalUpdate) : '-';
+    
+    tr.appendChild(urlTd);
+    tr.appendChild(headingsTd);
+    tr.appendChild(indexedAtTd);
+    tr.appendChild(lastUpdateTd);
+    
+    tbody.appendChild(tr);
+  });
   
   // Add click listeners for context menu
   const rows = tbody.querySelectorAll('tr');
@@ -104,10 +126,18 @@ function renderPagination() {
     return;
   }
   
-  let paginationHtml = '';
+  // Clear existing content
+  paginationContainer.innerHTML = '';
   
   // Previous button
-  paginationHtml += `<button class="pagination-btn" id="prevPageBtn" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>`;
+  const prevBtn = document.createElement('button');
+  prevBtn.className = 'pagination-btn';
+  prevBtn.id = 'prevPageBtn';
+  if (currentPage === 1) {
+    prevBtn.disabled = true;
+  }
+  prevBtn.textContent = '← Prev';
+  paginationContainer.appendChild(prevBtn);
   
   // Page numbers
   const maxVisiblePages = 5;
@@ -119,32 +149,62 @@ function renderPagination() {
   }
   
   if (startPage > 1) {
-    paginationHtml += `<button class="pagination-btn" data-page="1">1</button>`;
+    const firstBtn = document.createElement('button');
+    firstBtn.className = 'pagination-btn';
+    firstBtn.setAttribute('data-page', '1');
+    firstBtn.textContent = '1';
+    paginationContainer.appendChild(firstBtn);
+    
     if (startPage > 2) {
-      paginationHtml += `<span class="pagination-ellipsis">...</span>`;
+      const ellipsis = document.createElement('span');
+      ellipsis.className = 'pagination-ellipsis';
+      ellipsis.textContent = '...';
+      paginationContainer.appendChild(ellipsis);
     }
   }
   
   for (let i = startPage; i <= endPage; i++) {
-    paginationHtml += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+    const pageBtn = document.createElement('button');
+    pageBtn.className = 'pagination-btn';
+    if (i === currentPage) {
+      pageBtn.classList.add('active');
+    }
+    pageBtn.setAttribute('data-page', String(i));
+    pageBtn.textContent = String(i);
+    paginationContainer.appendChild(pageBtn);
   }
   
   if (endPage < totalPages) {
     if (endPage < totalPages - 1) {
-      paginationHtml += `<span class="pagination-ellipsis">...</span>`;
+      const ellipsis = document.createElement('span');
+      ellipsis.className = 'pagination-ellipsis';
+      ellipsis.textContent = '...';
+      paginationContainer.appendChild(ellipsis);
     }
-    paginationHtml += `<button class="pagination-btn" data-page="${totalPages}">${totalPages}</button>`;
+    const lastBtn = document.createElement('button');
+    lastBtn.className = 'pagination-btn';
+    lastBtn.setAttribute('data-page', String(totalPages));
+    lastBtn.textContent = String(totalPages);
+    paginationContainer.appendChild(lastBtn);
   }
   
   // Next button
-  paginationHtml += `<button class="pagination-btn" id="nextPageBtn" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>`;
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'pagination-btn';
+  nextBtn.id = 'nextPageBtn';
+  if (currentPage === totalPages) {
+    nextBtn.disabled = true;
+  }
+  nextBtn.textContent = 'Next →';
+  paginationContainer.appendChild(nextBtn);
   
   // Info text
   const startItem = (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const endItem = Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length);
-  paginationHtml += `<span class="pagination-info">${startItem}-${endItem} of ${filteredData.length}</span>`;
-  
-  paginationContainer.innerHTML = paginationHtml;
+  const infoSpan = document.createElement('span');
+  infoSpan.className = 'pagination-info';
+  infoSpan.textContent = `${startItem}-${endItem} of ${filteredData.length}`;
+  paginationContainer.appendChild(infoSpan);
   
   // Add event listeners
   document.getElementById('prevPageBtn').addEventListener('click', () => goToPage(currentPage - 1));

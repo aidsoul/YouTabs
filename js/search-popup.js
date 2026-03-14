@@ -196,54 +196,98 @@ function renderSearchHistory(filter = '') {
   if (filteredHistory.length === 0) {
     // If there's a filter, show "no results" for filter
     // Otherwise show "no recent searches" message
-    tabsList.innerHTML = `
-      <div class="search-history-empty">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <polyline points="12 6 12 12 16 14"/>
-        </svg>
-        <p>${filter ? 'No matching searches' : 'No recent searches'}</p>
-        <span class="search-history-hint">${filter ? 'Try a different search term' : 'Your search history will appear here'}</span>
-      </div>
-    `;
+    const emptyDiv = document.createElement('div');
+    emptyDiv.className = 'search-history-empty';
+    
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '24');
+    svg.setAttribute('height', '24');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.innerHTML = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+    
+    const p = document.createElement('p');
+    p.textContent = filter ? 'No matching searches' : 'No recent searches';
+    
+    const span = document.createElement('span');
+    span.className = 'search-history-hint';
+    span.textContent = filter ? 'Try a different search term' : 'Your search history will appear here';
+    
+    emptyDiv.appendChild(svg);
+    emptyDiv.appendChild(p);
+    emptyDiv.appendChild(span);
+    tabsList.innerHTML = '';
+    tabsList.appendChild(emptyDiv);
     if (tabCountEl) tabCountEl.textContent = filter ? 'No results' : 'No history';
     return;
   }
   
   isShowingHistory = true;
   
-  const html = `
-    <div class="search-history-container">
-      <div class="search-history-header">
-        <span>Recent Searches</span>
-        <button class="clear-history-btn" id="clearHistoryBtn" title="Clear history">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-          </svg>
-        </button>
-      </div>
-      <div class="search-history-list">
-        ${filteredHistory.map((item, index) => `
-          <div class="search-history-item" data-query="${escapeHtml(item.query)}" data-id="${item.id}">
-            <svg class="history-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
-            <span class="history-query">${escapeHtml(item.query)}</span>
-            <span class="history-count">${item.count > 1 ? `×${item.count}` : ''}</span>
-            <button class="delete-history-item" data-id="${item.id}" title="Remove">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
+  // Build history using DOM methods
+  tabsList.innerHTML = '';
   
-  tabsList.innerHTML = html;
+  const container = document.createElement('div');
+  container.className = 'search-history-container';
+  
+  const header = document.createElement('div');
+  header.className = 'search-history-header';
+  header.innerHTML = '<span>Recent Searches</span>';
+  
+  const clearHistoryBtn = document.createElement('button');
+  clearHistoryBtn.className = 'clear-history-btn';
+  clearHistoryBtn.id = 'clearHistoryBtn';
+  clearHistoryBtn.title = 'Clear history';
+  clearHistoryBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+  header.appendChild(clearHistoryBtn);
+  container.appendChild(header);
+  
+  const list = document.createElement('div');
+  list.className = 'search-history-list';
+  
+  filteredHistory.forEach((item, index) => {
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'search-history-item';
+    itemDiv.dataset.query = item.query;
+    itemDiv.dataset.id = item.id;
+    
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'history-icon');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.innerHTML = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+    itemDiv.appendChild(svg);
+    
+    const span = document.createElement('span');
+    span.className = 'history-query';
+    span.textContent = item.query;
+    itemDiv.appendChild(span);
+    
+    if (item.count > 1) {
+      const countSpan = document.createElement('span');
+      countSpan.className = 'history-count';
+      countSpan.textContent = `×${item.count}`;
+      itemDiv.appendChild(countSpan);
+    }
+    
+    const delBtn = document.createElement('button');
+    delBtn.className = 'delete-history-item';
+    delBtn.dataset.id = item.id;
+    delBtn.title = 'Remove';
+    delBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    itemDiv.appendChild(delBtn);
+    
+    list.appendChild(itemDiv);
+  });
+  
+  container.appendChild(list);
+  tabsList.appendChild(container);
   
   // Add event listeners for history items
   tabsList.querySelectorAll('.search-history-item').forEach(item => {
@@ -279,9 +323,9 @@ function renderSearchHistory(filter = '') {
   });
   
   // Add event listener for clear history button
-  const clearBtn = document.getElementById('clearHistoryBtn');
-  if (clearBtn) {
-    clearBtn.addEventListener('click', async (e) => {
+  const clearHistoryBtnEl = document.getElementById('clearHistoryBtn');
+  if (clearHistoryBtnEl) {
+    clearHistoryBtnEl.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
         if (window.YouTabsDB && window.YouTabsDB.clearSearchHistory) {
@@ -351,27 +395,49 @@ function renderSimpleTabs(tabsToRender) {
   // Update count
   if (tabCountEl) tabCountEl.textContent = `${tabsToRender.length} result${tabsToRender.length !== 1 ? 's' : ''}`;
 
-  // Render tabs
-  tabsList.innerHTML = tabsToRender.map((tab, index) => {
-    const favicon = tab.faviconIcon 
-      ? `<img class="tab-favicon" src="${escapeHtml(tab.faviconIcon)}" alt="">`
-      : `<div class="tab-favicon-placeholder">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <path d="M9 9h6M9 13h6M9 17h4"/>
-          </svg>
-        </div>`;
-
-    return `
-      <div class="tab-item" data-index="${index}" data-type="tab" data-url="${escapeHtml(tab.url)}" data-tab-id="${tab.id}">
-        ${favicon}
-        <div class="tab-info">
-          ${settings?.showTabTitle !== false ? `<div class="tab-title">${escapeHtml(tab.title || 'Untitled')}</div>` : ''}
-          <div class="tab-url">${escapeHtml(tab.url)}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
+  // Render tabs using DOM methods
+  tabsList.innerHTML = '';
+  
+  tabsToRender.forEach((tab, index) => {
+    const tabDiv = document.createElement('div');
+    tabDiv.className = 'tab-item';
+    tabDiv.dataset.index = index;
+    tabDiv.dataset.type = 'tab';
+    tabDiv.dataset.url = tab.url;
+    tabDiv.dataset.tabId = tab.id;
+    
+    // Add favicon
+    if (tab.faviconIcon) {
+      const img = document.createElement('img');
+      img.className = 'tab-favicon';
+      img.src = tab.faviconIcon;
+      img.alt = '';
+      tabDiv.appendChild(img);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'tab-favicon-placeholder';
+      placeholder.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>';
+      tabDiv.appendChild(placeholder);
+    }
+    
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'tab-info';
+    
+    if (settings?.showTabTitle !== false) {
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'tab-title';
+      titleDiv.textContent = tab.title || 'Untitled';
+      infoDiv.appendChild(titleDiv);
+    }
+    
+    const urlDiv = document.createElement('div');
+    urlDiv.className = 'tab-url';
+    urlDiv.textContent = tab.url;
+    infoDiv.appendChild(urlDiv);
+    
+    tabDiv.appendChild(infoDiv);
+    tabsList.appendChild(tabDiv);
+  });
 
   // Reset selection
   selectedIndex = -1;
@@ -453,53 +519,91 @@ function renderHeadingSearchResults(tabsToRender, headings) {
     tabCountEl.textContent = `${tabsToRender.length} / ${tabs.length}` + (headingCount > 0 ? ` (+${headingCount} headings)` : '');
   }
 
-  // Build HTML
-  let html = '';
+  // Build DOM using document fragment
+  const fragment = document.createDocumentFragment();
 
   // Render tabs first (if any)
   if (tabsToRender.length > 0) {
-    html += '<div class="search-tabs-section">';
-    html += tabsToRender.map((tab, index) => {
-      const favicon = tab.faviconIcon 
-        ? `<img class="tab-favicon" src="${escapeHtml(tab.faviconIcon)}" alt="">`
-        : `<div class="tab-favicon-placeholder">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-              <path d="M9 9h6M9 13h6M9 17h4"/>
-            </svg>
-          </div>`;
-
-      return `
-        <div class="tab-item" data-index="${index}" data-type="tab" data-url="${escapeHtml(tab.url)}" data-tab-id="${tab.id}">
-          ${favicon}
-          <div class="tab-info">
-            ${settings?.showTabTitle !== false ? `<div class="tab-title">${escapeHtml(tab.title || 'Untitled')}</div>` : ''}
-            <div class="tab-url">${escapeHtml(tab.url)}</div>
-          </div>
-        </div>
-      `;
-    }).join('');
-    html += '</div>';
+    const tabsSection = document.createElement('div');
+    tabsSection.className = 'search-tabs-section';
+    
+    tabsToRender.forEach((tab, index) => {
+      const tabDiv = document.createElement('div');
+      tabDiv.className = 'tab-item';
+      tabDiv.dataset.index = index;
+      tabDiv.dataset.type = 'tab';
+      tabDiv.dataset.url = tab.url;
+      tabDiv.dataset.tabId = tab.id;
+      
+      if (tab.faviconIcon) {
+        const img = document.createElement('img');
+        img.className = 'tab-favicon';
+        img.src = tab.faviconIcon;
+        img.alt = '';
+        tabDiv.appendChild(img);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'tab-favicon-placeholder';
+        placeholder.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>';
+        tabDiv.appendChild(placeholder);
+      }
+      
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'tab-info';
+      
+      if (settings?.showTabTitle !== false) {
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'tab-title';
+        titleDiv.textContent = tab.title || 'Untitled';
+        infoDiv.appendChild(titleDiv);
+      }
+      
+      const urlDiv = document.createElement('div');
+      urlDiv.className = 'tab-url';
+      urlDiv.textContent = tab.url;
+      infoDiv.appendChild(urlDiv);
+      
+      tabDiv.appendChild(infoDiv);
+      tabsSection.appendChild(tabDiv);
+    });
+    
+    fragment.appendChild(tabsSection);
   }
 
   // Render heading results with categories
   if (headings.length > 0) {
-    html += '<div class="heading-search-results" data-no-group="true">';
+    const headingResults = document.createElement('div');
+    headingResults.className = 'heading-search-results';
+    headingResults.dataset.noGroup = 'true';
     
     sortedTypes.forEach(([type, results]) => {
-      html += `<div class="heading-search-subcategory">`;
+      const subcategory = document.createElement('div');
+      subcategory.className = 'heading-search-subcategory';
       
       // Subcategory header
-      html += `
-        <div class="heading-search-subcategory-header">
-          <span class="heading-search-subcategory-toggle">−</span>
-          <span class="heading-search-subcategory-title">${typeLabels[type] || type}</span>
-          <span class="heading-search-subcategory-count">${results.length}</span>
-        </div>
-      `;
+      const header = document.createElement('div');
+      header.className = 'heading-search-subcategory-header';
+      
+      const toggle = document.createElement('span');
+      toggle.className = 'heading-search-subcategory-toggle';
+      toggle.textContent = '−';
+      header.appendChild(toggle);
+      
+      const title = document.createElement('span');
+      title.className = 'heading-search-subcategory-title';
+      title.textContent = typeLabels[type] || type;
+      header.appendChild(title);
+      
+      const count = document.createElement('span');
+      count.className = 'heading-search-subcategory-count';
+      count.textContent = results.length;
+      header.appendChild(count);
+      
+      subcategory.appendChild(header);
       
       // Subcategory items
-      html += '<div class="heading-search-subcategory-items">';
+      const itemsDiv = document.createElement('div');
+      itemsDiv.className = 'heading-search-subcategory-items';
       
       results.forEach((result, idx) => {
         const globalIndex = tabsToRender.length + headings.indexOf(result);
@@ -517,57 +621,99 @@ function renderHeadingSearchResults(tabsToRender, headings) {
           displayText = displayText.substring(0, 45) + '...';
         }
         
-        // Build item content with thumbnail for images
-        let itemContent = '';
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'heading-search-item';
+        itemDiv.dataset.index = globalIndex;
+        itemDiv.dataset.type = 'heading';
+        itemDiv.dataset.url = pageUrl;
+        itemDiv.dataset.tabId = tabId;
+        itemDiv.dataset.headingId = result.heading?.id || '';
+        itemDiv.dataset.headingType = type;
+        itemDiv.dataset.searchQuery = escapedQuery;
         
         // Image thumbnail
         if (type === 'image' && headingImgUrl) {
-          itemContent += `
-            <div class="heading-search-item-thumbnail clickable" data-img-url="${escapeHtml(headingImgUrl)}">
-              <img src="${escapeHtml(headingImgUrl)}" alt="${escapeHtml(displayText)}" loading="lazy" />
-            </div>
-          `;
+          const thumbDiv = document.createElement('div');
+          thumbDiv.className = 'heading-search-item-thumbnail clickable';
+          thumbDiv.dataset.imgUrl = headingImgUrl;
+          
+          const img = document.createElement('img');
+          img.src = headingImgUrl;
+          img.alt = displayText;
+          img.loading = 'lazy';
+          thumbDiv.appendChild(img);
+          
+          itemDiv.appendChild(thumbDiv);
         }
         
         // Video preview
         if ((type === 'video' || type === 'videoEmbed') && headingVideoUrl) {
-          itemContent += `
-            <div class="heading-search-item-thumbnail clickable video-preview" data-video-url="${escapeHtml(headingVideoUrl)}">
-              <span class="video-icon">▶</span>
-              <span class="video-label">${escapeHtml(displayText || 'Video')}</span>
-            </div>
-          `;
+          const thumbDiv = document.createElement('div');
+          thumbDiv.className = 'heading-search-item-thumbnail clickable video-preview';
+          thumbDiv.dataset.videoUrl = headingVideoUrl;
+          
+          const videoIcon = document.createElement('span');
+          videoIcon.className = 'video-icon';
+          videoIcon.textContent = '▶';
+          thumbDiv.appendChild(videoIcon);
+          
+          const videoLabel = document.createElement('span');
+          videoLabel.className = 'video-label';
+          videoLabel.textContent = displayText || 'Video';
+          thumbDiv.appendChild(videoLabel);
+          
+          itemDiv.appendChild(thumbDiv);
         }
         
         // Audio preview
         if (type === 'audio' && headingAudioUrl) {
-          itemContent += `
-            <div class="heading-search-item-thumbnail clickable audio-preview" data-audio-url="${escapeHtml(headingAudioUrl)}">
-              <span class="audio-icon">♪</span>
-              <span class="audio-label">${escapeHtml(displayText || 'Audio')}</span>
-            </div>
-          `;
+          const thumbDiv = document.createElement('div');
+          thumbDiv.className = 'heading-search-item-thumbnail clickable audio-preview';
+          thumbDiv.dataset.audioUrl = headingAudioUrl;
+          
+          const audioIcon = document.createElement('span');
+          audioIcon.className = 'audio-icon';
+          audioIcon.textContent = '♪';
+          thumbDiv.appendChild(audioIcon);
+          
+          const audioLabel = document.createElement('span');
+          audioLabel.className = 'audio-label';
+          audioLabel.textContent = displayText || 'Audio';
+          thumbDiv.appendChild(audioLabel);
+          
+          itemDiv.appendChild(thumbDiv);
         }
         
-        itemContent += `
-          <div class="heading-search-item-content">
-            <span class="heading-text">${escapeHtml(displayText)}</span>
-          </div>
-        `;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'heading-search-item-content';
         
-        html += `
-          <div class="heading-search-item" data-index="${globalIndex}" data-type="heading" data-url="${escapeHtml(pageUrl)}" data-tab-id="${tabId}" data-heading-id="${result.heading?.id || ''}" data-heading-type="${type}" data-search-query="${escapedQuery}">
-            ${itemContent}
-            ${parentTitle ? `<div class="heading-tab-info"><span class="heading-tab-title">${escapeHtml(parentTitle)}</span></div>` : ''}
-          </div>
-        `;
+        const textSpan = document.createElement('span');
+        textSpan.className = 'heading-text';
+        textSpan.textContent = displayText;
+        contentDiv.appendChild(textSpan);
+        
+        itemDiv.appendChild(contentDiv);
+        
+        if (parentTitle) {
+          const tabInfo = document.createElement('div');
+          tabInfo.className = 'heading-tab-info';
+          
+          const tabTitle = document.createElement('span');
+          tabTitle.className = 'heading-tab-title';
+          tabTitle.textContent = parentTitle;
+          tabInfo.appendChild(tabTitle);
+          
+          itemDiv.appendChild(tabInfo);
+        }
+        
+        itemsDiv.appendChild(itemDiv);
       });
       
-      html += '</div>';
-      html += '</div>';
+      subcategory.appendChild(itemsDiv);
+      headingResults.appendChild(subcategory);
     });
     
-    html += '</div>';
+    fragment.appendChild(headingResults);
   }
 
   const totalResults = tabsToRender.length + headings.length;
@@ -586,7 +732,8 @@ function renderHeadingSearchResults(tabsToRender, headings) {
     return;
   }
 
-  tabsList.innerHTML = html;
+  tabsList.innerHTML = '';
+  tabsList.appendChild(fragment);
 
   // Reset selection
   selectedIndex = -1;

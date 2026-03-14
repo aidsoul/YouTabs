@@ -1119,14 +1119,25 @@ function removeHighlightUI() {
 function showMatchCounter(count) {
   const counter = document.createElement('div');
   counter.className = 'yt-match-counter';
-  counter.innerHTML = `
-    <span class="yt-match-icon">🔍</span>
-    <span class="yt-match-count">${count} match${count !== 1 ? 'es' : ''}</span>
-    <span class="yt-match-dismiss" title="Clear highlights">✕</span>
-  `;
+  
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'yt-match-icon';
+  iconSpan.textContent = '🔍';
+  counter.appendChild(iconSpan);
+  
+  const countSpan = document.createElement('span');
+  countSpan.className = 'yt-match-count';
+  countSpan.textContent = `${count} match${count !== 1 ? 'es' : ''}`;
+  counter.appendChild(countSpan);
+  
+  const dismissSpan = document.createElement('span');
+  dismissSpan.className = 'yt-match-dismiss';
+  dismissSpan.title = 'Clear highlights';
+  dismissSpan.textContent = '✕';
+  counter.appendChild(dismissSpan);
   
   // Add click handler to dismiss
-  counter.querySelector('.yt-match-dismiss').addEventListener('click', () => {
+  dismissSpan.addEventListener('click', () => {
     counter.classList.add('yt-match-counter-hide');
     setTimeout(() => {
       removeHighlights();
@@ -1199,9 +1210,36 @@ function updateNavButtons() {
   const nextBtn = document.querySelector('.yt-next-btn');
   
   if (prevBtn && nextBtn) {
-    const positionText = totalHighlights > 0 ? `<span class="yt-nav-position">${currentHighlightIndex + 1}/${totalHighlights}</span>` : '';
-    prevBtn.innerHTML = `<span class="yt-nav-icon">◀</span> Prev ${positionText}`;
-    nextBtn.innerHTML = `Next <span class="yt-nav-icon">▶</span> ${positionText}`;
+    prevBtn.innerHTML = '';
+    nextBtn.innerHTML = '';
+    
+    const prevIcon = document.createElement('span');
+    prevIcon.className = 'yt-nav-icon';
+    prevIcon.textContent = '◀';
+    prevBtn.appendChild(prevIcon);
+    
+    const prevText = document.createTextNode(' Prev');
+    prevBtn.appendChild(prevText);
+    
+    const nextText = document.createTextNode('Next ');
+    nextBtn.appendChild(nextText);
+    
+    const nextIcon = document.createElement('span');
+    nextIcon.className = 'yt-nav-icon';
+    nextIcon.textContent = '▶';
+    nextBtn.appendChild(nextIcon);
+    
+    if (totalHighlights > 0) {
+      const prevPos = document.createElement('span');
+      prevPos.className = 'yt-nav-position';
+      prevPos.textContent = `${currentHighlightIndex + 1}/${totalHighlights}`;
+      prevBtn.appendChild(prevPos);
+      
+      const nextPos = document.createElement('span');
+      nextPos.className = 'yt-nav-position';
+      nextPos.textContent = `${currentHighlightIndex + 1}/${totalHighlights}`;
+      nextBtn.appendChild(nextPos);
+    }
   }
 }
 

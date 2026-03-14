@@ -551,42 +551,78 @@ class YouTabsCore {
   createModal() {
     if (this.modal) return;
     
-    const modalHTML = `
-      <div class="modal-overlay" id="customModalOverlay">
-        <div class="custom-modal">
-          <div class="modal-header">
-            <h3 class="modal-title" id="modalTitle"></h3>
-            <button class="modal-close" id="modalClose" aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body">
-            <p class="modal-message" id="modalMessage"></p>
-            <div class="modal-input-wrapper" id="modalInputWrapper" style="display: none;">
-              <input type="text" class="modal-input" id="modalInput" placeholder="Enter name...">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="modal-btn modal-btn-cancel" id="modalCancel">Cancel</button>
-            <button class="modal-btn modal-btn-confirm" id="modalConfirm">OK</button>
-          </div>
-        </div>
-      </div>
-    `;
+    // Create modal using DOM elements for security
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'customModalOverlay';
     
-    const container = document.createElement('div');
-    container.innerHTML = modalHTML;
-    this.modal = container.firstElementChild;
+    const modal = document.createElement('div');
+    modal.className = 'custom-modal';
+    
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    
+    const title = document.createElement('h3');
+    title.className = 'modal-title';
+    title.id = 'modalTitle';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'modal-close';
+    closeBtn.id = 'modalClose';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    const body = document.createElement('div');
+    body.className = 'modal-body';
+    
+    const message = document.createElement('p');
+    message.className = 'modal-message';
+    message.id = 'modalMessage';
+    
+    const inputWrapper = document.createElement('div');
+    inputWrapper.className = 'modal-input-wrapper';
+    inputWrapper.id = 'modalInputWrapper';
+    inputWrapper.style.display = 'none';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'modal-input';
+    input.id = 'modalInput';
+    input.placeholder = 'Enter name...';
+    
+    inputWrapper.appendChild(input);
+    body.appendChild(message);
+    body.appendChild(inputWrapper);
+    
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-btn modal-btn-cancel';
+    cancelBtn.id = 'modalCancel';
+    cancelBtn.textContent = 'Cancel';
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'modal-btn modal-btn-confirm';
+    confirmBtn.id = 'modalConfirm';
+    confirmBtn.textContent = 'OK';
+    
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    
+    this.modal = overlay;
     document.body.appendChild(this.modal);
     
-    // Bind modal events - query relative to the modal to avoid conflicts
-    const overlay = this.modal;
-    const closeBtn = this.modal.querySelector('#modalClose');
-    const cancelBtn = this.modal.querySelector('#modalCancel');
-    const confirmBtn = this.modal.querySelector('#modalConfirm');
-    const input = this.modal.querySelector('#modalInput');
+    // Bind modal events - using the already created elements
+    const modalElement = this.modal.querySelector('.custom-modal');
     
     // Close on overlay click
     overlay.addEventListener('click', (e) => {

@@ -792,7 +792,27 @@ class TabManager {
    */
   async executeScript(tabId, details) {
     try {
-      return await browser.tabs.executeScript(Number(tabId), details);
+      // Convert details for MV3 scripting API
+      const scriptOptions = {
+        target: { tabId: Number(tabId) },
+        injectImmediately: details.runAt !== 'document_start'
+      };
+      
+      if (details.code) {
+        // For inline code, use code property directly instead of Function constructor
+        scriptOptions.code = details.code;
+      } else if (details.file) {
+        // For files, use files array
+        scriptOptions.files = [details.file];
+      }
+      
+      if (details.runAt) {
+        scriptOptions.runAt = details.runAt;
+      }
+      
+      const results = await browser.scripting.executeScript(scriptOptions);
+      // Return just the result values to match old API behavior
+      return results ? results.map(r => r.result) : [];
     } catch (error) {
       console.error('TabManager: Error executing script in tab:', error);
       return [];

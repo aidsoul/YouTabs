@@ -573,15 +573,19 @@ class YouTabsSidebar extends YouTabsCore {
     
     // Show empty state if no history
     if (filteredHistory.length === 0) {
-      this.tabsList.innerHTML = `
-        <div class="sidebar-history-empty">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
-          </svg>
-          <p>${filter ? 'No matching searches' : 'No recent searches'}</p>
-        </div>
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'sidebar-history-empty';
+      emptyDiv.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
       `;
+      const p = document.createElement('p');
+      p.textContent = filter ? 'No matching searches' : 'No recent searches';
+      emptyDiv.appendChild(p);
+      this.tabsList.innerHTML = '';
+      this.tabsList.appendChild(emptyDiv);
       if (this.tabCount) this.tabCount.textContent = filter ? '0' : '0';
       return;
     }
@@ -590,24 +594,45 @@ class YouTabsSidebar extends YouTabsCore {
     this.historySelectedIndex = -1;
     
     // Render history items
-    const html = filteredHistory.map((item, index) => `
-      <div class="sidebar-history-item ${index === this.historySelectedIndex ? 'selected' : ''}" data-query="${this.escapeHtml(item.query)}" data-index="${index}">
-        <svg class="history-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <polyline points="12 6 12 12 16 14"/>
-        </svg>
-        <span class="history-query">${this.escapeHtml(item.query)}</span>
-        ${item.count > 1 ? `<span class="history-count">×${item.count}</span>` : ''}
-        <button class="delete-history-item" data-id="${item.id}" title="Remove">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-    `).join('');
-    
-    this.tabsList.innerHTML = html;
+    this.tabsList.innerHTML = '';
+    filteredHistory.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = `sidebar-history-item ${index === this.historySelectedIndex ? 'selected' : ''}`;
+      div.dataset.query = item.query;
+      div.dataset.index = index;
+
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'history-icon');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.innerHTML = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+      div.appendChild(svg);
+
+      const span = document.createElement('span');
+      span.className = 'history-query';
+      span.textContent = item.query;
+      div.appendChild(span);
+
+      if (item.count > 1) {
+        const countSpan = document.createElement('span');
+        countSpan.className = 'history-count';
+        countSpan.textContent = `×${item.count}`;
+        div.appendChild(countSpan);
+      }
+
+      const btn = document.createElement('button');
+      btn.className = 'delete-history-item';
+      btn.dataset.id = item.id;
+      btn.title = 'Remove';
+      btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      div.appendChild(btn);
+
+      this.tabsList.appendChild(div);
+    });
     
     // Add event listeners
     this.tabsList.querySelectorAll('.sidebar-history-item').forEach(item => {
